@@ -1,8 +1,18 @@
 # Basurto · agenda y formación práctica
 
-Piloto web local para Chrome. Agenda central, ficha reducida y aislamiento por profesor. Solo datos ficticios durante esta fase; no es todavía un despliegue de producción ni una certificación de cumplimiento RGPD.
+Piloto web para Chrome, con servidor local y adaptación para Cloudflare Workers. Agenda central, ficha reducida y aislamiento por profesor. Solo datos ficticios durante esta fase; no es todavía un despliegue de producción ni una certificación de cumplimiento RGPD.
 
-## Probar en Chrome
+## Cloudflare: acceso central
+
+La dirección es https://basurto.admobility26.workers.dev. El servidor de `cloudflare/` implementa la misma API y sirve la interfaz existente. Usa un Durable Object con SQLite y transacciones síncronas para comprobar y reservar horarios de forma indivisible. La instancia central se crea con jurisdicción UE. No se migran datos ni contraseñas de las pruebas locales.
+
+Primer acceso: **Activar administración · primer acceso**, correo autorizado, clave privada de activación y contraseña elegida por el titular (dos veces). La clave caduca a las 24 horas y el alta se bloquea cuando existe la primera cuenta de oficina. Después: **Administración → Usuarios → Crear usuario** para profesores; **Alumnos** para asignar alumnos y **Vehículos** para registrar matrículas.
+
+Despliegue técnico: `npm ci` y `npm run deploy`, con la cuenta Cloudflare autorizada. La configuración de `wrangler.jsonc` conserva el nombre `basurto` y el enlace a la base. No cambiar el nombre de la clase, la jurisdicción ni el identificador `basurto-office-v1`: seleccionan la base existente. Configurar mediante secretos `ADMIN_EMAIL`, `ADMIN_ACTIVATION_HASH` (SHA-256 de una clave aleatoria de 32 bytes) y `ADMIN_ACTIVATION_EXPIRES` (segundos Unix). Nunca subir la clave ni contraseñas al repositorio. No configurar `LOCAL_DEVELOPMENT` en producción.
+
+La versión Python continúa disponible para pruebas locales. Una cuenta creada allí no existe en Cloudflare. Antes de usar datos reales, completar las medidas operativas de `docs/PRIVACIDAD.md`.
+
+## Probar en Chrome localmente
 
 Requiere Python 3.11 o posterior, sin paquetes externos.
 
@@ -38,7 +48,7 @@ Las incidencias requieren conexión y no se incluyen en la copia offline. El reg
 
 ## Límites deliberados del piloto
 
-- Solo localhost: no se ha publicado un servicio central accesible desde la autoescuela. Oficina y profesor se simulan como cuentas distintas sobre este servidor. No basta abrir el HTML ni activar GitHub Pages.
+- El servidor Python se limita a localhost. El despliegue Cloudflare utiliza otro servidor y otra base central: las cuentas y datos locales no se transfieren automáticamente. No basta abrir el HTML ni activar GitHub Pages.
 - Offline admite recargar la **misma pestaña** dentro de la sesión de ocho horas previamente iniciada. Cerrar la pestaña puede perder la clave local: sincronizar antes de cerrarla. La persistencia offline duradera entre cierres queda pendiente del diseño de dispositivos/autenticación. La interfaz avisa al cerrar con datos pendientes.
 - No se garantiza reserva global offline; se confirma al reconectar. Sincronización al abrir/recuperar foco/conexión, manual y cada 30 segundos con la aplicación abierta. No hay sincronización garantizada con el navegador cerrado.
 - Sin edición/reasignación de alumnos, múltiples matrículas formativas por alumno, mantenimiento, capacidad de pista, márgenes de preparación, recurrencias, recuperación de contraseña ni MFA en esta versión.

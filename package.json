@@ -1,0 +1,13 @@
+{
+  "name": "basurto",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:cloudflare": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test:cloudflare": "node --test tests/cloudflare.test.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "4.158.0"
+  }
+}

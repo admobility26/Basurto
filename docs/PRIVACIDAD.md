@@ -36,3 +36,9 @@ Fuentes oficiales:
 8. Probar de nuevo autorización por objeto, acceso horizontal, simultaneidad, recuperación de datos y sincronización en las tablets/ordenadores reales.
 
 No publicar este servidor de desarrollo directamente en Internet. El modo demo no puede usarse para datos reales. Convertir el repositorio en privado es una decisión separada; no sustituye las protecciones de los datos operativos y no se ha cambiado su visibilidad.
+
+## Adaptación Cloudflare (7 de noviembre de 2026)
+
+El despliegue central usa HTTPS, cookies Secure y una base SQLite de Durable Objects con jurisdicción UE. El servidor vuelve a validar rol, objeto, origen y CSRF. Contraseñas scrypt; activación limitada al correo configurado mediante secreto y una clave aleatoria privada, con caducidad y bloqueo tras el primer alta. Hay límites de intentos de acceso y no se registran cuerpos de peticiones. La observabilidad del Worker está desactivada en esta configuración.
+
+GitHub contiene únicamente código, documentación y pruebas ficticias. Cloudflare sí será encargado del alojamiento de datos cuando se introduzcan: siguen pendientes la revisión contractual, retención, derechos, recuperación de cuentas, copias/restauración y dispositivos. La jurisdicción de almacenamiento no constituye por sí sola cumplimiento RGPD ni una afirmación sobre todos los metadatos del proveedor. No se han transferido las bases locales.

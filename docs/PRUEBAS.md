@@ -40,3 +40,10 @@ Las pruebas manuales realizadas en esta entrega se registran en el mensaje de en
 - Pruebas automatizadas de permisos por rol, alta de profesores por administración y de otros roles solo por gerencia, aislamiento de incidencias, reasignación, validación, reintentos, versiones y seguimiento sin sobrescribir el relato.
 - Chrome: acceso con contraseña de gerencia y registro de un accidente ficticio verificados; detalle con matrícula, clase, fecha, autor, relato y medidas. No se considera verificado manualmente el ciclo completo de cierre del parte.
 - Para la demo, consultar las credenciales generadas en `.runtime/demo-access.json`; no hay botones que omitan la contraseña.
+
+## Adaptación Cloudflare
+
+- 10 pruebas de la API adaptada con SQLite real: activación, aislamiento, roles, solapes, remolques, revisiones, reintentos, fichas, incidencias y revocación de sesión.
+- Prueba HTTP con workerd local: activación y login, cookies, CSRF, origen, alta de profesor por administración, aislamiento y logout. Usuarios ficticios exclusivamente locales.
+- 27 pruebas Python y las comprobaciones existentes de cliente siguen aprobadas.
+- La activación real del administrador queda para el titular: no se crea una contraseña de producción durante las pruebas.
