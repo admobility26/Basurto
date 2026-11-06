@@ -37,6 +37,7 @@ class Store:
             CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY, actor TEXT NOT NULL, action TEXT NOT NULL, entity TEXT NOT NULL, at TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS incidents(id TEXT PRIMARY KEY, lesson_id TEXT NOT NULL REFERENCES lessons(id), teacher_id TEXT NOT NULL REFERENCES users(id), student_id TEXT NOT NULL REFERENCES students(id), vehicle_label TEXT NOT NULL, author_id TEXT NOT NULL REFERENCES users(id), occurred_at TEXT NOT NULL, category TEXT NOT NULL, location TEXT NOT NULL, description TEXT NOT NULL, measures TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', version INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS incident_updates(id TEXT PRIMARY KEY, incident_id TEXT NOT NULL REFERENCES incidents(id), author_id TEXT NOT NULL REFERENCES users(id), note TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS admin_setup(id INTEGER PRIMARY KEY CHECK(id=1), username TEXT NOT NULL, token_hash TEXT NOT NULL, expires REAL NOT NULL);
             CREATE TABLE IF NOT EXISTS login_attempts(username TEXT PRIMARY KEY, attempts INTEGER NOT NULL, until REAL NOT NULL);
             ''')
             # Migrate legacy idempotency payloads: retain fingerprints, not duplicate PII.
@@ -57,6 +58,30 @@ class Store:
     def add_user(self, name, username, password, role):
         if role not in ('teacher','admin','manager') or len(password)<12: raise Problem('Rol inválido o contraseña inferior a 12 caracteres')
         with self.db() as c: c.execute('INSERT INTO users VALUES(?,?,?,?,?,1)', (secrets.token_hex(12),name,username,password_hash(password),role))
+    def prepare_admin(self, username):
+        token=secrets.token_urlsafe(32)
+        with self.db() as c:
+            c.execute('BEGIN IMMEDIATE')
+            if c.execute("SELECT 1 FROM users WHERE role IN ('admin','manager')").fetchone(): raise Problem('Ya existe una cuenta de oficina; el alta inicial está deshabilitada',409)
+            c.execute('INSERT OR REPLACE INTO admin_setup VALUES(1,?,?,?)',(username,hashlib.sha256(token.encode()).hexdigest(),time.time()+86400))
+        return token
+    def setup_available(self):
+        with self.db() as c:
+            return bool(c.execute("SELECT 1 FROM admin_setup WHERE expires>? AND NOT EXISTS(SELECT 1 FROM users WHERE role IN ('admin','manager'))",(time.time(),)).fetchone())
+    def activate_admin(self, data):
+        username=required(data,'username',100); token=required(data,'activation',100)
+        password=data.get('password')
+        if not isinstance(password,str) or not 12<=len(password)<=200 or password!=data.get('confirmation'): raise Problem('Las contraseñas deben coincidir y tener entre 12 y 200 caracteres')
+        with self.db() as c:
+            c.execute('BEGIN IMMEDIATE')
+            setup=c.execute('SELECT * FROM admin_setup WHERE id=1').fetchone()
+            if not setup or setup['expires']<=time.time() or username!=setup['username'] or not hmac.compare_digest(hashlib.sha256(token.encode()).hexdigest(),setup['token_hash']): raise Problem('Activación no válida o caducada',403)
+            if c.execute("SELECT 1 FROM users WHERE role IN ('admin','manager')").fetchone(): raise Problem('El alta inicial ya está cerrada',409)
+            uid=secrets.token_hex(12)
+            c.execute('INSERT INTO users VALUES(?,?,?,?,?,1)',(uid,'Administración',username,password_hash(password),'admin'))
+            c.execute('DELETE FROM admin_setup')
+            c.execute('INSERT INTO audit(actor,action,entity,at) VALUES(?,?,?,?)',(uid,'activate_admin',uid,now()))
+            return self.session(c,{'id':uid})
     def session(self, c, user):
         token, csrf=secrets.token_urlsafe(32),secrets.token_urlsafe(24)
         c.execute('INSERT INTO sessions VALUES(?,?,?,?)',(hashlib.sha256(token.encode()).hexdigest(),user['id'],csrf,time.time()+8*3600))
@@ -246,7 +271,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         try:
             path=urlparse(self.path).path
-            if path=='/api/config':return self.send(200,{'demo':self.server.demo})
+            if path=='/api/config':return self.send(200,{'demo':self.server.demo,'setup':self.server.store.setup_available()})
             if path=='/api/bootstrap':return self.send(200,self.server.store.bootstrap(self.user()))
             if path=='/api/incidents':return self.send(200,self.server.store.incidents(self.user(),parse_qs(urlparse(self.path).query).get('id',[None])[0]))
             assets={'/':('index.html','text/html; charset=utf-8'),'/app.js':('app.js','text/javascript'),'/style.css':('style.css','text/css'),'/sw.js':('sw.js','text/javascript'),'/logo.png':('logo.png','image/png')}
@@ -263,6 +288,8 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError,UnicodeError):raise Problem('Solicitud inválida')
             if not isinstance(data,dict):raise Problem('Solicitud inválida')
             path=urlparse(self.path).path;store=self.server.store
+            if path=='/api/setup':
+                token,csrf=store.activate_admin(data);return self.send(200,{'csrf':csrf},self.cookie(token))
             if path=='/api/login':
                 password=data.get('password')
                 if not isinstance(password,str) or not 1<=len(password)<=200: raise Problem('Usuario o contraseña incorrectos',401)
@@ -279,9 +306,18 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError,TypeError,sqlite3.Error):self.send(400,{'error':'No se pudo guardar. Revisa los datos e inténtalo de nuevo.'})
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('--port',type=int,default=8765);p.add_argument('--db');p.add_argument('--demo',action='store_true');p.add_argument('--create-user',action='store_true');p.add_argument('--reset-demo-passwords',action='store_true');args=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--port',type=int,default=8765);p.add_argument('--db');p.add_argument('--demo',action='store_true');p.add_argument('--create-user',action='store_true');p.add_argument('--reset-demo-passwords',action='store_true');p.add_argument('--setup-admin',metavar='EMAIL');args=p.parse_args()
     if args.reset_demo_passwords and not args.demo: p.error('--reset-demo-passwords requiere --demo')
     store=Store(args.db or ROOT/('.runtime/demo.sqlite' if args.demo else '.runtime/basurto.sqlite'))
+    if args.setup_admin:
+        if args.demo: p.error('El alta inicial requiere una base sin cuentas demo')
+        token=store.prepare_admin(args.setup_admin)
+        destination=Path(store.path).parent/'admin-activation.txt'
+        fd=os.open(destination,os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600)
+        with os.fdopen(fd,'w') as f: f.write('Usuario: '+args.setup_admin+'\nClave de activación (24 horas, un solo uso): '+token+'\nAbre la web y pulsa Activar administración. Tú eliges la contraseña.\n')
+        os.chmod(destination,0o600)
+        print('Activación preparada en '+str(destination)+'; vuelve a arrancar sin --setup-admin.',flush=True)
+        return
     if args.create_user:
         store.add_user(input('Nombre: '),input('Usuario: '),getpass.getpass('Contraseña (12+ caracteres): '),input('Rol (teacher/admin/manager): '));return
     if args.demo:
