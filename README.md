@@ -29,7 +29,7 @@ El archivo `.runtime/demo.sqlite` conserva las pruebas entre reinicios y no se s
 Logo aportado por la autoescuela y amarillo corporativo. Cada persona entra con una cuenta individual; elegir un área no concede permisos.
 
 - Profesor: únicamente sus alumnos, clases y sus incidencias autorizadas.
-- Administración: agenda y alumnos de todos los profesores, consulta de fichas y seguimiento de incidencias.
+- Administración: agenda y alumnos de todos los profesores, consulta de fichas, seguimiento de incidencias y creación de cuentas de profesores desde Usuarios.
 - Gerencia: acceso global y alta de usuarios con su rol.
 
 Desde la ficha de clase o desde Incidencias se registra fecha, lugar, tipo, relato y medidas tomadas. La matrícula queda conservada junto al parte. El relato inicial no se sobrescribe: se añaden actuaciones con autor y fecha; administración y gerencia pueden pasar el parte a En revisión o Cerrada. Los profesores pueden añadir seguimiento, pero no cerrar partes.
@@ -52,7 +52,7 @@ python3 server.py --create-user
 python3 server.py
 ```
 
-Crear primero una cuenta `manager`. Desde Gerencia → Usuarios se pueden crear cuentas de profesor, administración y gerencia; administración no puede crear cuentas ni ampliar permisos. El área elegida al entrar debe coincidir con el permiso guardado en el servidor. Contraseña de al menos 12 caracteres mediante entrada oculta. Nunca introducir alumnos reales en el piloto local sin completar la revisión de privacidad y operación descrita en `docs/PRIVACIDAD.md`.
+Crear primero una cuenta `admin` (administración) o `manager` (gerencia) con el comando anterior, eligiendo usuario y contraseña privados. Administración entra seleccionando su área en la pantalla de acceso; desde Usuarios → Crear usuario introduce el nombre, usuario y contraseña inicial de cada profesor. Desde Gerencia → Usuarios se pueden crear cuentas de profesor, administración y gerencia; administración puede crear cuentas de profesor, pero no administradores ni gerentes. El área elegida al entrar debe coincidir con el permiso guardado en el servidor. Contraseña de al menos 12 caracteres mediante entrada oculta. Nunca introducir alumnos reales en el piloto local sin completar la revisión de privacidad y operación descrita en `docs/PRIVACIDAD.md`.
 
 ## Arquitectura
 

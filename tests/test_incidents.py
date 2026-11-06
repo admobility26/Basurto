@@ -44,6 +44,15 @@ class IncidentTests(unittest.TestCase):
   token,_=self.s.login('new-office','New-test-password-123','admin');self.assertEqual(self.s.authenticate(token)['role'],'admin')
   with self.s.db() as c:
    self.assertNotIn('New-test',c.execute('SELECT payload FROM operations WHERE id=?',('new-user',)).fetchone()['payload'])
+ def test_admin_creates_teacher_but_cannot_escalate(self):
+  data=dict(action='create_user',operation_id='admin-teacher',name='Profesor nuevo',username='profesor-nuevo',role='teacher',password='Teacher-test-password-123')
+  self.fail(403,lambda:self.s.mutate(self.a,data))
+  self.s.mutate(self.admin,data)
+  self.s.mutate(self.admin,data)
+  token,_=self.s.login('profesor-nuevo',data['password'],'teacher')
+  self.assertEqual(self.s.authenticate(token)['role'],'teacher')
+  for role in ('admin','manager'):
+   self.fail(403,lambda:self.s.mutate(self.admin,dict(data,operation_id=role,username=role,role=role)))
  def test_old_payloads_migrate_to_fingerprints(self):
   raw=json.dumps({'note':'Legacy personal note'},sort_keys=True)
   with self.s.db() as c:c.execute('INSERT INTO operations VALUES(?,?,?,?)',('legacy','teacher-a',raw,'{}'))

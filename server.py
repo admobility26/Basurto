@@ -112,8 +112,9 @@ class Store:
                 try: c.execute('INSERT INTO vehicles VALUES(?,?,?,?)',(entity,required(data,'name'),plate,kind))
                 except sqlite3.IntegrityError: raise Problem('Matrícula ya registrada',409)
             elif action=='create_user':
-                if user['role']!='manager': raise Problem('Solo gerencia puede crear cuentas',403)
+                if not staff: raise Problem('Solo oficina puede crear cuentas',403)
                 role=required(data,'role',20);username=required(data,'username',100)
+                if user['role']=='admin' and role!='teacher': raise Problem('Administración solo puede crear profesores',403)
                 password=data.get('password')
                 if role not in ('teacher','admin','manager') or not isinstance(password,str) or not 12<=len(password)<=200: raise Problem('Selecciona un rol y una contraseña de 12 a 200 caracteres')
                 try: c.execute('INSERT INTO users VALUES(?,?,?,?,?,1)',(entity,required(data,'name'),username,password_hash(password),role))
