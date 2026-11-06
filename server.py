@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from http.cookies import SimpleCookie
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 
 ROOT = Path(__file__).parent
 GOALS = ['Preparación y mandos', 'Observación', 'Posición y trayectoria', 'Velocidad y control', 'Intersecciones', 'Señalización y maniobras', 'Seguridad y convivencia', 'Autonomía', 'Marcha atrás', 'Acoplamiento y desacoplamiento']
@@ -35,8 +35,14 @@ class Store:
             CREATE TABLE IF NOT EXISTS sheets(lesson_id TEXT PRIMARY KEY REFERENCES lessons(id), ratings TEXT NOT NULL, note TEXT NOT NULL, next_goal TEXT NOT NULL, minutes INTEGER NOT NULL, updated_at TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS operations(id TEXT PRIMARY KEY, user_id TEXT NOT NULL, payload TEXT NOT NULL, result TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY, actor TEXT NOT NULL, action TEXT NOT NULL, entity TEXT NOT NULL, at TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS incidents(id TEXT PRIMARY KEY, lesson_id TEXT NOT NULL REFERENCES lessons(id), teacher_id TEXT NOT NULL REFERENCES users(id), student_id TEXT NOT NULL REFERENCES students(id), vehicle_label TEXT NOT NULL, author_id TEXT NOT NULL REFERENCES users(id), occurred_at TEXT NOT NULL, category TEXT NOT NULL, location TEXT NOT NULL, description TEXT NOT NULL, measures TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', version INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS incident_updates(id TEXT PRIMARY KEY, incident_id TEXT NOT NULL REFERENCES incidents(id), author_id TEXT NOT NULL REFERENCES users(id), note TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS login_attempts(username TEXT PRIMARY KEY, attempts INTEGER NOT NULL, until REAL NOT NULL);
             ''')
+            # Migrate legacy idempotency payloads: retain fingerprints, not duplicate PII.
+            for row in c.execute('SELECT id,payload FROM operations').fetchall():
+                if row['payload'].startswith('{'):
+                    c.execute('UPDATE operations SET payload=? WHERE id=?',(hashlib.sha256(row['payload'].encode()).hexdigest(),row['id']))
         os.chmod(path, 0o600)
     @contextmanager
     def db(self):
@@ -55,14 +61,14 @@ class Store:
         token, csrf=secrets.token_urlsafe(32),secrets.token_urlsafe(24)
         c.execute('INSERT INTO sessions VALUES(?,?,?,?)',(hashlib.sha256(token.encode()).hexdigest(),user['id'],csrf,time.time()+8*3600))
         return token,csrf
-    def login(self, username, password):
+    def login(self, username, password, expected_role=None):
         with self.db() as c:
             c.execute('BEGIN IMMEDIATE')
             attempt=c.execute('SELECT * FROM login_attempts WHERE username=?',(username,)).fetchone()
             if attempt and attempt['attempts']>=5 and attempt['until']>time.time(): raise Problem('Espera unos minutos antes de volver a intentarlo',429)
             user=c.execute('SELECT * FROM users WHERE username=? AND active=1',(username,)).fetchone()
             check=password_hash(password, user['password'].split(':')[0] if user else '0'*32)
-            if not user or not hmac.compare_digest(check,user['password']):
+            if not user or not hmac.compare_digest(check,user['password']) or (expected_role is not None and expected_role!=user['role']):
                 n=attempt['attempts']+1 if attempt and attempt['until']>time.time() else 1
                 c.execute('INSERT OR REPLACE INTO login_attempts VALUES(?,?,?)',(username,n,time.time()+900));c.commit()
                 raise Problem('Usuario o contraseña incorrectos',401)
@@ -84,7 +90,7 @@ class Store:
             return dict(user={k:user[k] for k in ('id','name','role','expires')}, csrf=user['csrf'],students=students,lessons=lessons,vehicles=[dict(r) for r in c.execute('SELECT * FROM vehicles')],users=users,goals=GOALS,server_time=now())
     def mutate(self, user, data):
         operation=required(data,'operation_id',100)
-        payload=json.dumps(data,sort_keys=True)
+        payload=hashlib.sha256(json.dumps(data,sort_keys=True).encode()).hexdigest()
         with self.db() as c:
             c.execute('BEGIN IMMEDIATE')
             prior=c.execute('SELECT * FROM operations WHERE id=?',(operation,)).fetchone()
@@ -105,6 +111,40 @@ class Store:
                 if kind not in ('car','motorcycle','truck','bus','trailer'): raise Problem('Tipo de vehículo inválido')
                 try: c.execute('INSERT INTO vehicles VALUES(?,?,?,?)',(entity,required(data,'name'),plate,kind))
                 except sqlite3.IntegrityError: raise Problem('Matrícula ya registrada',409)
+            elif action=='create_user':
+                if user['role']!='manager': raise Problem('Solo gerencia puede crear cuentas',403)
+                role=required(data,'role',20);username=required(data,'username',100)
+                password=data.get('password')
+                if role not in ('teacher','admin','manager') or not isinstance(password,str) or not 12<=len(password)<=200: raise Problem('Selecciona un rol y una contraseña de 12 a 200 caracteres')
+                try: c.execute('INSERT INTO users VALUES(?,?,?,?,?,1)',(entity,required(data,'name'),username,password_hash(password),role))
+                except sqlite3.IntegrityError: raise Problem('Ese usuario ya existe',409)
+            elif action=='incident':
+                lesson=self.owned_lesson(c,user,required(data,'lesson_id'))
+                if lesson['status'] in ('cancelled','absent'): raise Problem('No se puede registrar una incidencia en una clase cancelada o con ausencia',409)
+                category=required(data,'category',30)
+                if category not in ('accident','breakdown','safety','other'): raise Problem('Tipo de incidencia inválido')
+                try:
+                    occurred=dt.datetime.fromisoformat(data.get('occurred_at',''))
+                    if not occurred.tzinfo: raise ValueError()
+                    occurred=occurred.astimezone(dt.timezone.utc).isoformat()
+                except (TypeError,ValueError): raise Problem('Fecha y hora inválidas')
+                vehicle=c.execute('SELECT name,plate FROM vehicles WHERE id=?',(lesson['vehicle_id'],)).fetchone()
+                vehicle_label=vehicle['name']+' · '+vehicle['plate']
+                if lesson['trailer_id']:
+                    trailer=c.execute('SELECT name,plate FROM vehicles WHERE id=?',(lesson['trailer_id'],)).fetchone()
+                    vehicle_label+=' + '+trailer['name']+' · '+trailer['plate']
+                c.execute('INSERT INTO incidents(id,lesson_id,teacher_id,student_id,vehicle_label,author_id,occurred_at,category,location,description,measures,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
+                          (entity,lesson['id'],lesson['teacher_id'],lesson['student_id'],vehicle_label,user['id'],occurred,category,required(data,'location',200),required(data,'description',1500),required(data,'measures',1000),now()))
+            elif action=='incident_update':
+                entity=required(data,'incident_id')
+                incident=self.owned_incident(c,user,entity)
+                if data.get('version')!=incident['version']: raise Problem('La incidencia ha cambiado. Vuelve a abrirla antes de añadir el seguimiento.',409)
+                status=data.get('status',incident['status'])
+                if status not in ('open','reviewing','closed'): raise Problem('Estado inválido')
+                if not staff and status!=incident['status']: raise Problem('Solo oficina o gerencia puede cambiar el estado',403)
+                note=required(data,'note',1000)
+                c.execute('INSERT INTO incident_updates VALUES(?,?,?,?,?,?)',(secrets.token_hex(12),entity,user['id'],note,status,now()))
+                c.execute('UPDATE incidents SET status=?,version=version+1 WHERE id=?',(status,entity))
             elif action in ('book','reschedule'):
                 student=c.execute('SELECT * FROM students WHERE id=?',(data.get('student_id'),)).fetchone()
                 if not student or (not staff and student['teacher_id']!=user['id']): raise Problem('Alumno no disponible',403)
@@ -153,9 +193,32 @@ class Store:
         l=c.execute('SELECT l.* FROM lessons l JOIN students s ON s.id=l.student_id WHERE l.id=?'+(' AND l.teacher_id=? AND s.teacher_id=?' if user['role']=='teacher' else ''),(entity,user['id'],user['id']) if user['role']=='teacher' else (entity,)).fetchone()
         if not l: raise Problem('Clase no disponible',404)
         return l
+    def owned_incident(self,c,user,entity):
+        incident=c.execute('SELECT i.* FROM incidents i JOIN students s ON s.id=i.student_id WHERE i.id=?'+(' AND i.teacher_id=? AND s.teacher_id=?' if user['role']=='teacher' else ''),(entity,user['id'],user['id']) if user['role']=='teacher' else (entity,)).fetchone()
+        if not incident: raise Problem('Incidencia no disponible',404)
+        return incident
+    def incidents(self,user,entity=None):
+        with self.db() as c:
+            if entity:
+                item=dict(self.owned_incident(c,user,entity))
+                item['updates']=[dict(r) for r in c.execute('SELECT id,author_id,note,status,created_at FROM incident_updates WHERE incident_id=? ORDER BY created_at,id',(entity,))]
+                c.execute('INSERT INTO audit(actor,action,entity,at) VALUES(?,?,?,?)',(user['id'],'incident_read',entity,now()))
+                return item
+            return [dict(r) for r in c.execute('SELECT i.id,i.lesson_id,i.student_id,i.vehicle_label,i.occurred_at,i.category,i.status,i.version FROM incidents i JOIN students s ON s.id=i.student_id'+(' WHERE i.teacher_id=? AND s.teacher_id=?' if user['role']=='teacher' else '')+' ORDER BY i.occurred_at DESC',(user['id'],user['id']) if user['role']=='teacher' else ())]
+    def reset_demo_passwords(self):
+        credentials=[]
+        with self.db() as c:
+            for username in ('office','manager','teacher-a','teacher-b'):
+                row=c.execute('SELECT id,role FROM users WHERE id=? AND username=?',(username,username)).fetchone()
+                if not row: continue
+                password=secrets.token_urlsafe(18)
+                c.execute('UPDATE users SET password=? WHERE id=?',(password_hash(password),row['id']))
+                c.execute('DELETE FROM sessions WHERE user_id=?',(row['id'],))
+                credentials.append({'username':username,'role':row['role'],'password':password})
+        return credentials
     def seed_demo(self):
         with self.db() as c:
-            if c.execute('SELECT 1 FROM users').fetchone(): return
+            if c.execute('SELECT 1 FROM users').fetchone(): return False
             for uid,name,role in [('office','Oficina de pruebas','admin'),('manager','Gerencia de pruebas','manager'),('teacher-a','Profesor A · prueba','teacher'),('teacher-b','Profesor B · prueba','teacher')]:
                 c.execute('INSERT INTO users VALUES(?,?,?,?,?,1)',(uid,name,uid,password_hash(secrets.token_urlsafe(32)),role))
             for sid,name,teacher,permit in [('s1','Alumno de prueba 01','teacher-a','C'),('s2','Alumna de prueba 02','teacher-a','D'),('s3','Alumno de prueba 03','teacher-b','B')]: c.execute('INSERT INTO students VALUES(?,?,?,?,?)',(sid,name,permit,teacher,''))
@@ -164,6 +227,8 @@ class Store:
             for i,s,t,v in [(0,'s1','teacher-a','v1'),(1,'s2','teacher-a','v2'),(2,'s3','teacher-b','v3')]:
                 start=today+dt.timedelta(hours=i)
                 c.execute('INSERT INTO lessons(id,student_id,teacher_id,vehicle_id,start,end,mode) VALUES(?,?,?,?,?,?,?)',('lesson-'+str(i),s,t,v,start.astimezone(dt.timezone.utc).isoformat(),(start+dt.timedelta(minutes=45)).astimezone(dt.timezone.utc).isoformat(),'Pistas'))
+
+        return True
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self,*args): pass # Do not log URLs, names or request bodies.
@@ -182,7 +247,8 @@ class Handler(BaseHTTPRequestHandler):
             path=urlparse(self.path).path
             if path=='/api/config':return self.send(200,{'demo':self.server.demo})
             if path=='/api/bootstrap':return self.send(200,self.server.store.bootstrap(self.user()))
-            assets={'/':('index.html','text/html; charset=utf-8'),'/app.js':('app.js','text/javascript'),'/style.css':('style.css','text/css'),'/sw.js':('sw.js','text/javascript')}
+            if path=='/api/incidents':return self.send(200,self.server.store.incidents(self.user(),parse_qs(urlparse(self.path).query).get('id',[None])[0]))
+            assets={'/':('index.html','text/html; charset=utf-8'),'/app.js':('app.js','text/javascript'),'/style.css':('style.css','text/css'),'/sw.js':('sw.js','text/javascript'),'/logo.png':('logo.png','image/png')}
             if path not in assets:raise Problem('No encontrado',404)
             f,ct=assets[path];self.send(200,(ROOT/'static'/f).read_bytes(),ctype=ct)
         except Problem as e:self.send(e.status,{'error':e.message})
@@ -197,13 +263,9 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(data,dict):raise Problem('Solicitud inválida')
             path=urlparse(self.path).path;store=self.server.store
             if path=='/api/login':
-                token,csrf=store.login(required(data,'username',100),required(data,'password',200));return self.send(200,{'csrf':csrf},self.cookie(token))
-            if path=='/api/demo' and self.server.demo:
-                with store.db() as c:
-                    user=c.execute('SELECT * FROM users WHERE id=?',(data.get('user'),)).fetchone()
-                    if not user:raise Problem('Usuario no disponible')
-                    token,csrf=store.session(c,user)
-                return self.send(200,{'csrf':csrf},self.cookie(token))
+                password=data.get('password')
+                if not isinstance(password,str) or not 1<=len(password)<=200: raise Problem('Usuario o contraseña incorrectos',401)
+                token,csrf=store.login(required(data,'username',100),password,data.get('role'));return self.send(200,{'csrf':csrf},self.cookie(token))
             user=self.user()
             if not hmac.compare_digest(self.headers.get('X-CSRF-Token',''),user['csrf']):raise Problem('Sesión no válida',403)
             if path=='/api/logout':
@@ -216,11 +278,20 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError,TypeError,sqlite3.Error):self.send(400,{'error':'No se pudo guardar. Revisa los datos e inténtalo de nuevo.'})
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('--port',type=int,default=8765);p.add_argument('--db');p.add_argument('--demo',action='store_true');p.add_argument('--create-user',action='store_true');args=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--port',type=int,default=8765);p.add_argument('--db');p.add_argument('--demo',action='store_true');p.add_argument('--create-user',action='store_true');p.add_argument('--reset-demo-passwords',action='store_true');args=p.parse_args()
+    if args.reset_demo_passwords and not args.demo: p.error('--reset-demo-passwords requiere --demo')
     store=Store(args.db or ROOT/('.runtime/demo.sqlite' if args.demo else '.runtime/basurto.sqlite'))
     if args.create_user:
         store.add_user(input('Nombre: '),input('Usuario: '),getpass.getpass('Contraseña (12+ caracteres): '),input('Rol (teacher/admin/manager): '));return
-    if args.demo:store.seed_demo()
+    if args.demo:
+        created=store.seed_demo()
+        if created or args.reset_demo_passwords:
+            credentials=store.reset_demo_passwords()
+            destination=Path(store.path).parent/'demo-access.json'
+            fd=os.open(destination,os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600)
+            with os.fdopen(fd,'w') as f: json.dump(credentials,f,indent=2)
+            os.chmod(destination,0o600)
+            print('Credenciales de prueba generadas en '+str(destination)+' (archivo privado; no subir a GitHub)',flush=True)
     http=ThreadingHTTPServer(('127.0.0.1',args.port),Handler);http.store=store;http.demo=args.demo;http.secure=False;http.origin=f'http://127.0.0.1:{args.port}'
     print(f'Basurto: {http.origin} — '+('DEMOSTRACIÓN: solo datos ficticios' if args.demo else 'Piloto local'),flush=True)
     http.serve_forever()

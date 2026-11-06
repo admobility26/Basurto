@@ -10,7 +10,7 @@ Requiere Python 3.11 o posterior, sin paquetes externos.
 python3 server.py --demo
 ```
 
-Abrir http://127.0.0.1:8765 en Chrome. La entrada ofrece Profesor A, Profesor B, Administración y Gerencia. Los accesos sin contraseña existen **únicamente** al arrancar con `--demo`; solo se escucha en el equipo local. Matrículas y alumnos de prueba son ficticios. Usar un perfil de Chrome normal y otro de incógnito para probar dos cuentas simultáneas (las pestañas del mismo perfil comparten cookie).
+Abrir http://127.0.0.1:8765 en Chrome. La entrada ofrece Profesor, Administración y Gerencia, siempre con usuario y contraseña. Al crear la demostración se generan contraseñas aleatorias en `.runtime/demo-access.json` (archivo privado, no se sube a GitHub). Para renovar las cuentas de una demo anterior, arrancar con `--demo --reset-demo-passwords`; se revocan sus sesiones anteriores. Solo se escucha en el equipo local. Matrículas y alumnos de prueba son ficticios. Usar un perfil de Chrome normal y otro de incógnito para probar dos cuentas simultáneas (las pestañas del mismo perfil comparten cookie).
 
 El archivo `.runtime/demo.sqlite` conserva las pruebas entre reinicios y no se sube a GitHub. Para otra base de pruebas, usar `--db /ruta/a/otra-demo.sqlite`.
 
@@ -24,12 +24,24 @@ El archivo `.runtime/demo.sqlite` conserva las pruebas entre reinicios y no se s
 - Reintentos idempotentes, revisiones por clase y discrepancias conservadas. Una reserva offline es una propuesta hasta que el servidor la confirma.
 - Caché de interfaz sin datos personales; copia local cifrada de los datos autorizados y cola de cambios en IndexedDB. La clave permanece en la sesión de la pestaña.
 
+## Identidad, accesos e incidencias
+
+Logo aportado por la autoescuela y amarillo corporativo. Cada persona entra con una cuenta individual; elegir un área no concede permisos.
+
+- Profesor: únicamente sus alumnos, clases y sus incidencias autorizadas.
+- Administración: agenda y alumnos de todos los profesores, consulta de fichas y seguimiento de incidencias.
+- Gerencia: acceso global y alta de usuarios con su rol.
+
+Desde la ficha de clase o desde Incidencias se registra fecha, lugar, tipo, relato y medidas tomadas. La matrícula queda conservada junto al parte. El relato inicial no se sobrescribe: se añaden actuaciones con autor y fecha; administración y gerencia pueden pasar el parte a En revisión o Cerrada. Los profesores pueden añadir seguimiento, pero no cerrar partes.
+
+Las incidencias requieren conexión y no se incluyen en la copia offline. El registro queda disponible en la aplicación de oficina; no envía emergencias, correos ni partes a aseguradoras. Evitar diagnósticos y datos innecesarios de terceros. No admite archivos adjuntos.
+
 ## Límites deliberados del piloto
 
 - Solo localhost: no se ha publicado un servicio central accesible desde la autoescuela. Oficina y profesor se simulan como cuentas distintas sobre este servidor. No basta abrir el HTML ni activar GitHub Pages.
 - Offline admite recargar la **misma pestaña** dentro de la sesión de ocho horas previamente iniciada. Cerrar la pestaña puede perder la clave local: sincronizar antes de cerrarla. La persistencia offline duradera entre cierres queda pendiente del diseño de dispositivos/autenticación. La interfaz avisa al cerrar con datos pendientes.
 - No se garantiza reserva global offline; se confirma al reconectar. Sincronización al abrir/recuperar foco/conexión, manual y cada 30 segundos con la aplicación abierta. No hay sincronización garantizada con el navegador cerrado.
-- Sin gestión web de cuentas, edición/reasignación de alumnos, múltiples matrículas formativas por alumno, mantenimiento, capacidad de pista, márgenes de preparación, recurrencias, recuperación de contraseña ni MFA en esta versión.
+- Sin edición/reasignación de alumnos, múltiples matrículas formativas por alumno, mantenimiento, capacidad de pista, márgenes de preparación, recurrencias, recuperación de contraseña ni MFA en esta versión.
 - La agenda inicial utiliza lista diaria/semanal propia, sin dependencia de calendario externo. FullCalendar sigue siendo candidato para una futura cuadrícula de oficina; no reemplaza las restricciones del servidor.
 - Se conserva intacto el proyecto anterior [FichaAutoescuela](https://github.com/promociones7819-stack/FichaAutoescuela). No se han importado ni convertido sus datos. Basurto toma la ficha reducida como referencia funcional; la migración requiere copia, correspondencia de alumnos/profesores y verificación de históricos antes de operar con datos reales.
 
@@ -40,7 +52,7 @@ python3 server.py --create-user
 python3 server.py
 ```
 
-Crear primero una cuenta `admin` o `manager` y las cuentas `teacher`. Contraseña de al menos 12 caracteres mediante entrada oculta. Nunca introducir alumnos reales en el piloto local sin completar la revisión de privacidad y operación descrita en `docs/PRIVACIDAD.md`.
+Crear primero una cuenta `manager`. Desde Gerencia → Usuarios se pueden crear cuentas de profesor, administración y gerencia; administración no puede crear cuentas ni ampliar permisos. El área elegida al entrar debe coincidir con el permiso guardado en el servidor. Contraseña de al menos 12 caracteres mediante entrada oculta. Nunca introducir alumnos reales en el piloto local sin completar la revisión de privacidad y operación descrita en `docs/PRIVACIDAD.md`.
 
 ## Arquitectura
 

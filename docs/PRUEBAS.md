@@ -29,8 +29,14 @@ Las pruebas manuales realizadas en esta entrega se registran en el mensaje de en
 
 ## Resultado de esta entrega
 
-- 16 pruebas de servidor/API aprobadas: incluye autenticación, CSRF, origen, cierre de sesión y modo demo deshabilitado.
+- 24 pruebas de servidor/API aprobadas: incluye autenticación, CSRF, origen, cierre de sesión y modo demo deshabilitado.
 - Pruebas de cliente con almacenamiento simulado aprobadas: cifrado sin clave en IndexedDB, recuperación en la misma pestaña, reserva provisional offline sin inventar confirmación, rechazo de clave incorrecta y limpieza al salir.
 - Chrome real: entrada como profesor A, ficha de Marcha atrás guardada con nivel Casi autónomo, contador actualizado; administración ve las tres citas y la clase realizada; profesor B solo ve su alumno y su cita. Cierre de sesión verificado.
 - Inspección visual de la agenda realizada.
 - Desconexión/reconexión completa en Chrome: pendiente de repetir. Se intentó interrumpiendo el servidor local, pero no se obtuvo verificación concluyente de la interacción durante el corte. No se presenta como prueba superada.
+
+## Ampliación de marca, cuentas e incidencias
+
+- Pruebas automatizadas de permisos por rol, alta de cuentas solo por gerencia, aislamiento de incidencias, reasignación, validación, reintentos, versiones y seguimiento sin sobrescribir el relato.
+- Chrome: acceso con contraseña de gerencia y registro de un accidente ficticio verificados; detalle con matrícula, clase, fecha, autor, relato y medidas. No se considera verificado manualmente el ciclo completo de cierre del parte.
+- Para la demo, consultar las credenciales generadas en `.runtime/demo-access.json`; no hay botones que omitan la contraseña.

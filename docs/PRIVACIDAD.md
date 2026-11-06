@@ -14,12 +14,15 @@ Fuentes oficiales:
 - Profesores no reciben listados de otros profesores ni alumnos o clases ajenas. La API filtra antes de enviar; no se limita a ocultar botones.
 - Matrículas compartidas visibles para seleccionar vehículo, sin revelar a quién está reservado. Comprobación de disponibilidad mediante respuesta genérica.
 - Escritura de fichas solo por el profesor de la clase. Altas de alumnos/vehículos solo por administración/gerencia.
-- Autenticación individual fuera del modo demo, sesiones de ocho horas, contraseñas scrypt, protección CSRF/origen, consultas parametrizadas y registros de auditoría mínimos.
+- Autenticación individual también en modo demo, sesiones de ocho horas, contraseñas scrypt, protección CSRF/origen, consultas parametrizadas y registros de auditoría mínimos.
 - Los datos del servidor están en un archivo fuera del control de versiones, con permisos 0600. La base SQLite NO está cifrada por la aplicación: depende de la protección del equipo. No equivale a cifrado de servidor de producción.
 - No se envían datos a GitHub ni a proveedores de analítica. El repositorio es público y solo debe contener código, documentación y pruebas ficticias.
 - Copia offline AES-GCM, clave en sessionStorage de la pestaña. No protege contra un usuario con la sesión desbloqueada, extensiones maliciosas o un XSS ejecutado en el mismo origen. La política de contenido reduce superficie; no elimina esos riesgos.
 - Logout revoca la sesión en servidor y elimina la copia de esta pestaña. Se impide salir con cambios/borradores sin resolver. El límite offline y el cierre de pestañas requieren especial cuidado en el piloto.
 - Revocaciones o cambios de asignación se aplican online inmediatamente; un equipo desconectado puede conservar la última copia hasta caducar la autorización. No se promete borrado remoto instantáneo offline.
+
+- Incidencias disponibles solo online, excluidas del bootstrap y la copia local. Relato inicial y seguimiento separados, autorización por clase/alumno y registro de consulta. Los datos permanecen en SQLite y sus copias: es necesario definir acceso y conservación antes del uso real.
+- Las operaciones conservan una huella del contenido para detectar reintentos, no una segunda copia de narrativas ni contraseñas. Las cuentas nuevas solo las crea gerencia; no existe acceso demo sin contraseña.
 
 ## Antes de datos reales y acceso entre dispositivos
 
