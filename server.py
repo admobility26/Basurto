@@ -93,11 +93,15 @@ class Store:
             if attempt and attempt['attempts']>=5 and attempt['until']>time.time(): raise Problem('Espera unos minutos antes de volver a intentarlo',429)
             user=c.execute('SELECT * FROM users WHERE username=? AND active=1',(username,)).fetchone()
             check=password_hash(password, user['password'].split(':')[0] if user else '0'*32)
-            if not user or not hmac.compare_digest(check,user['password']) or (expected_role is not None and expected_role!=user['role']):
+            if not user or not hmac.compare_digest(check,user['password']):
                 n=attempt['attempts']+1 if attempt and attempt['until']>time.time() else 1
                 c.execute('INSERT OR REPLACE INTO login_attempts VALUES(?,?,?)',(username,n,time.time()+900));c.commit()
                 raise Problem('Usuario o contraseña incorrectos',401)
             c.execute('DELETE FROM login_attempts WHERE username=?',(username,))
+            if expected_role is not None and expected_role!=user['role']:
+                c.commit()
+                area={'teacher':'Profesor','admin':'Administración','manager':'Gerencia'}[user['role']]
+                raise Problem('Contraseña correcta. Selecciona '+area+' para entrar con esta cuenta.',403)
             return self.session(c,user)
     def authenticate(self, token):
         with self.db() as c:

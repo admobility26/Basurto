@@ -47,12 +47,13 @@ export class BasurtoOffice extends DurableObject {
   let data;try{data=JSON.parse(Buffer.concat(chunks).toString('utf8'))}catch{throw new Problem('Solicitud inválida')}
   if(!data||typeof data!=='object'||Array.isArray(data))throw new Problem('Solicitud inválida');
   // Rate limit anonymous expensive auth without keeping plaintext network identifiers.
-  if(path==='/api/login'||path==='/api/setup'){
+  if(path==='/api/login'||path==='/api/setup'||path==='/api/recover'){
    const {digest}=await import('./store.mjs');const key=digest((request.headers.get('CF-Connecting-IP')||'local')+':'+path),now=Date.now()/1000;
    store.run('DELETE FROM request_limits WHERE until<?',now);
    const row=store.one('SELECT * FROM request_limits WHERE key=?',key);
    if(row&&row.count>=20)throw new Problem('Demasiados intentos. Espera 15 minutos.',429);
    store.run('INSERT OR REPLACE INTO request_limits VALUES(?,?,?)',key,(row?.count||0)+1,row?.until||now+900);
+   if(path==='/api/recover')return json(store.recover(data),200,cookie('',request,true));
    const session=path==='/api/setup'?store.activate(data):store.login(data);
    return json({csrf:session.csrf},200,cookie(session.token,request));
   }

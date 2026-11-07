@@ -37,7 +37,7 @@ class IncidentTests(unittest.TestCase):
   with self.s.db() as c:c.execute("UPDATE students SET teacher_id='teacher-b' WHERE id='s1'")
   self.assertEqual(self.s.incidents(self.a),[]);self.fail(404,lambda:self.s.incidents(self.a,incident));self.fail(404,lambda:self.s.incidents(self.b,incident));self.assertEqual(len(self.s.incidents(self.admin)),1)
  def test_role_login_cannot_escalate(self):
-  self.s.add_user('Prueba','test','valid-password-123','teacher');self.fail(401,lambda:self.s.login('test','valid-password-123','manager'));token,_=self.s.login('test','valid-password-123','teacher');self.assertEqual(self.s.authenticate(token)['role'],'teacher')
+  self.s.add_user('Prueba','test','valid-password-123','teacher');self.fail(403,lambda:self.s.login('test','valid-password-123','manager'));token,_=self.s.login('test','valid-password-123','teacher');self.assertEqual(self.s.authenticate(token)['role'],'teacher')
  def test_only_manager_creates_users_no_password_in_operations(self):
   data=dict(action='create_user',operation_id='new-user',name='Cuenta prueba',username='new-office',role='admin',password='New-test-password-123')
   self.fail(403,lambda:self.s.mutate(self.a,data));self.fail(403,lambda:self.s.mutate(self.admin,data));self.s.mutate(self.manager,data)

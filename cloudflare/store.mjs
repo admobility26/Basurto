@@ -23,17 +23,31 @@ export class Store {
   const uid=id();this.run('INSERT INTO users VALUES(?,?,?,?,?,1)',uid,'Administración',username,hash(pass),'admin');
   this.run('INSERT INTO audit(actor,action,entity,at) VALUES(?,?,?,?)',uid,'activate_admin',uid,now());return this.session(uid);
  })}
+ recover(data){return this.tx(()=>{
+  const token=required(data,'recovery',160),username=required(data,'username',100),tokenHash=digest(token);
+  if(!this.env.ADMIN_RECOVERY_HASH||Number(this.env.ADMIN_RECOVERY_EXPIRES)<=seconds()||!Number.isFinite(Number(this.env.ADMIN_RECOVERY_EXPIRES))||username!==this.env.ADMIN_EMAIL||!same(tokenHash,this.env.ADMIN_RECOVERY_HASH)||this.one("SELECT 1 FROM audit WHERE action='admin_password_recovery' AND entity=?",tokenHash))throw new Problem('Recuperación no válida, caducada o ya utilizada',403);
+  const user=this.one("SELECT * FROM users WHERE username=? AND active=1 AND role='admin'",username);
+  if(!user)throw new Problem('Recuperación no válida, caducada o ya utilizada',403);
+  const pass=password(data);if(pass!==data.confirmation)throw new Problem('Las contraseñas deben coincidir');
+  this.run('UPDATE users SET password=? WHERE id=?',hash(pass),user.id);
+  this.run('DELETE FROM sessions WHERE user_id=?',user.id);
+  this.run('DELETE FROM login_attempts WHERE username=?',username);
+  this.run('INSERT INTO audit(actor,action,entity,at) VALUES(?,?,?,?)',user.id,'admin_password_recovery',tokenHash,now());
+  return {ok:true};
+ })}
  session(uid){const token=id(),csrf=id();this.run('INSERT INTO sessions VALUES(?,?,?,?)',digest(token),uid,csrf,seconds()+28800);return {token,csrf}}
  login(data){const username=required(data,'username',100);if(typeof data.password!=='string'||data.password.length>200)throw new Problem('Usuario o contraseña incorrectos',401);
   const attempt=this.one('SELECT * FROM login_attempts WHERE username=?',username);
   if(attempt&&attempt.attempts>=5&&attempt.until>seconds())throw new Problem('Espera unos minutos antes de volver a intentarlo',429);
   const u=this.one('SELECT * FROM users WHERE username=? AND active=1',username);
   const check=hash(data.password,u?u.password.split(':')[0]:'0'.repeat(32));
-  if(!u||!same(check,u.password)||(data.role!==undefined&&data.role!==u.role)){
+  if(!u||!same(check,u.password)){
    const n=attempt&&attempt.until>seconds()?attempt.attempts+1:1;
    this.run('INSERT OR REPLACE INTO login_attempts VALUES(?,?,?)',username,n,seconds()+900);throw new Problem('Usuario o contraseña incorrectos',401);
   }
-  this.run('DELETE FROM login_attempts WHERE username=?',username);return this.session(u.id);
+  this.run('DELETE FROM login_attempts WHERE username=?',username);
+  if(data.role!==undefined&&data.role!==u.role)throw new Problem('Contraseña correcta. Selecciona '+({teacher:'Profesor',admin:'Administración',manager:'Gerencia'}[u.role])+' para entrar con esta cuenta.',403);
+  return this.session(u.id);
  }
  authenticate(token){const u=this.one('SELECT u.id,u.name,u.role,s.csrf,s.expires FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires>? AND u.active=1',digest(token),seconds());if(!u)throw new Problem('Inicia sesión para continuar',401);return u}
  logout(token){this.run('DELETE FROM sessions WHERE token=?',digest(token))}
