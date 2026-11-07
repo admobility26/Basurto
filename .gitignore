@@ -7,3 +7,9 @@ node_modules/
 .wrangler/
 .dev.vars*
 dist/
+
+native-dist/
+src-tauri/target/
+src-tauri/gen/
+*.keystore
+*.jks

@@ -1,0 +1,2 @@
+'use strict';
+window.nativeReady.then(async()=>{if(!document.querySelector('#app'))return;for(const src of ['/training.js','/app.js'])await new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=src;script.onload=resolve;script.onerror=reject;document.body.append(script)})}).catch(()=>{document.body.textContent='No se pudo abrir la caja local. Cierra y vuelve a abrir Basurto.'});

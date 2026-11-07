@@ -89,3 +89,7 @@ La clave no es una contraseña predeterminada: se consume al activar. Solo se gu
 ### Formación
 
 Nueva pestaña con catálogo de 339 señales editable, biblioteca de PDF versionados y preparación/proyección de clases. [Uso, permisos y almacenamiento](docs/FORMACION.md). Requiere Cloudflare y el binding privado R2 `TRAINING_FILES` al bucket `basurto`. La biblioteca parte vacía.
+
+### Instaladores privados
+
+Basurto incluye un cliente Tauri para Android, macOS y Windows, con caja local cifrada persistente y conexión exclusiva al servidor de esta autoescuela. [Uso, compilación y límites de la primera versión](docs/APLICACIONES-NATIVAS.md).

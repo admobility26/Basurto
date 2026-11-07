@@ -1,0 +1,55 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "Basurto",
+  "version": "0.2.0",
+  "identifier": "com.admobility.basurto",
+  "build": {
+    "frontendDist": "../native-dist",
+    "beforeBuildCommand": "node scripts/prepare-native.mjs"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Autoescuela Basurto",
+        "width": 1280,
+        "height": 820,
+        "resizable": true,
+        "fullscreen": false,
+        "label": "main",
+        "minWidth": 360,
+        "minHeight": 560
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data: blob:; connect-src 'self' ipc: http://ipc.localhost; frame-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'"
+    },
+    "withGlobalTauri": true
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "android": {
+      "debugApplicationIdSuffix": ".debug",
+      "minSdkVersion": 24
+    },
+    "macOS": {
+      "signingIdentity": "-",
+      "minimumSystemVersion": "11.0"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": [
+          "Spanish"
+        ]
+      }
+    }
+  }
+}

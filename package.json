@@ -5,9 +5,18 @@
   "scripts": {
     "dev:cloudflare": "wrangler dev",
     "deploy": "wrangler deploy",
-    "test:cloudflare": "node --test tests/cloudflare.test.mjs"
+    "test:cloudflare": "node --test tests/cloudflare.test.mjs",
+    "native:prepare": "node scripts/prepare-native.mjs",
+    "native:mac": "tauri build --target universal-apple-darwin --bundles dmg",
+    "native:windows": "tauri build --target x86_64-pc-windows-msvc --bundles nsis",
+    "native:android:init": "tauri android init --ci && node scripts/prepare-android.mjs",
+    "native:android": "tauri android build --apk --target aarch64 armv7",
+    "test:native": "cargo test --manifest-path src-tauri/Cargo.toml && node tests/test_client.cjs",
+    "tauri": "tauri"
   },
   "devDependencies": {
+    "@tauri-apps/api": "2.12.4",
+    "@tauri-apps/cli": "2.12.4",
     "wrangler": "4.158.0"
   },
   "dependencies": {
