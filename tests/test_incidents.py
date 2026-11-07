@@ -51,10 +51,17 @@ class IncidentTests(unittest.TestCase):
   self.s.mutate(self.admin,data)
   token,_=self.s.login('profesor-nuevo',data['password'],'teacher')
   self.assertEqual(self.s.authenticate(token)['role'],'teacher')
-  for role in ('admin','manager'):
+  for role in ('admin',):
    self.fail(403,lambda:self.s.mutate(self.admin,dict(data,operation_id=role,username=role,role=role)))
  def test_old_payloads_migrate_to_fingerprints(self):
   raw=json.dumps({'note':'Legacy personal note'},sort_keys=True)
   with self.s.db() as c:c.execute('INSERT INTO operations VALUES(?,?,?,?)',('legacy','teacher-a',raw,'{}'))
   Store(self.s.path)
   with self.s.db() as c:self.assertEqual(len(c.execute('SELECT payload FROM operations WHERE id=?',('legacy',)).fetchone()['payload']),64)
+
+ def test_admin_creates_manager(self):
+  data=dict(action='create_user',operation_id='admin-manager',name='Gerente nuevo',username='gerente-nuevo',role='manager',password='Manager-test-password-123')
+  self.fail(403,lambda:self.s.mutate(self.a,data))
+  self.s.mutate(self.admin,data)
+  token,_=self.s.login(data['username'],data['password'],'manager')
+  self.assertEqual(self.s.authenticate(token)['role'],'manager')

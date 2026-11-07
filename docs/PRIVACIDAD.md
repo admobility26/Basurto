@@ -22,7 +22,7 @@ Fuentes oficiales:
 - Revocaciones o cambios de asignación se aplican online inmediatamente; un equipo desconectado puede conservar la última copia hasta caducar la autorización. No se promete borrado remoto instantáneo offline.
 
 - Incidencias disponibles solo online, excluidas del bootstrap y la copia local. Relato inicial y seguimiento separados, autorización por clase/alumno y registro de consulta. Los datos permanecen en SQLite y sus copias: es necesario definir acceso y conservación antes del uso real.
-- Las operaciones conservan una huella del contenido para detectar reintentos, no una segunda copia de narrativas ni contraseñas. Administración crea cuentas de profesor; gerencia también puede crear administradores y gerentes; no existe acceso demo sin contraseña.
+- Las operaciones conservan una huella del contenido para detectar reintentos, no una segunda copia de narrativas ni contraseñas. Administración crea cuentas de profesor y gerente; gerencia también puede crear administradores; no existe acceso demo sin contraseña.
 
 ## Antes de datos reales y acceso entre dispositivos
 

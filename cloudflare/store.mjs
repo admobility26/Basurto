@@ -77,7 +77,7 @@ export class Store {
    this.run('INSERT INTO vehicles VALUES(?,?,?,?)',entity,required(data,'name'),plate,kind);
   }else if(action==='create_user'){
    if(!staff)throw new Problem('Solo oficina puede crear cuentas',403);const role=required(data,'role',20),username=required(data,'username',100);
-   if(user.role==='admin'&&role!=='teacher')throw new Problem('Administración solo puede crear profesores',403);
+   if(user.role==='admin'&&!['teacher','manager'].includes(role))throw new Problem('Administración puede crear profesores y gerentes',403);
    if(!['teacher','admin','manager'].includes(role))throw new Problem('Rol inválido');
    if(this.one('SELECT 1 FROM users WHERE username=?',username))throw new Problem('Ese usuario ya existe',409);
    this.run('INSERT INTO users VALUES(?,?,?,?,?,1)',entity,required(data,'name'),username,hash(password(data)),role);
