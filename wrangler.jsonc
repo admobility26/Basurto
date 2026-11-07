@@ -30,5 +30,11 @@
   ],
   "observability": {
     "enabled": false
-  }
+  },
+  "r2_buckets": [
+    {
+      "binding": "TRAINING_FILES",
+      "bucket_name": "basurto"
+    }
+  ]
 }

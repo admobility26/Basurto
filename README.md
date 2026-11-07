@@ -85,3 +85,7 @@ Ver `docs/PRUEBAS.md` y `docs/PRIVACIDAD.md` antes de ampliar el piloto.
 En una base nueva, el operador prepara el correo autorizado con `python3 server.py --setup-admin CORREO`. La clave aleatoria se guarda en `.runtime/admin-activation.txt`, con permisos privados y caducidad de 24 horas. Reiniciar con `python3 server.py`, abrir la web y pulsar **Activar administración · primer acceso**. El titular introduce su correo, la clave de activación y una contraseña elegida por él, repetida para confirmar.
 
 La clave no es una contraseña predeterminada: se consume al activar. Solo se guarda su huella en la base. No se permite preparar ni completar el alta si ya existe una cuenta de oficina. El correo no se publica en la configuración anónima ni se fija en el código. Este flujo requiere la API del servidor; alojar únicamente los archivos estáticos en Cloudflare no permite activar ni iniciar sesión.
+
+### Formación
+
+Nueva pestaña con catálogo de 339 señales editable, biblioteca de PDF versionados y preparación/proyección de clases. [Uso, permisos y almacenamiento](docs/FORMACION.md). Requiere Cloudflare y el binding privado R2 `TRAINING_FILES` al bucket `basurto`. La biblioteca parte vacía.

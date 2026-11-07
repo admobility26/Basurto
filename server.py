@@ -274,7 +274,7 @@ class Handler(BaseHTTPRequestHandler):
             if path=='/api/config':return self.send(200,{'demo':self.server.demo,'setup':self.server.store.setup_available()})
             if path=='/api/bootstrap':return self.send(200,self.server.store.bootstrap(self.user()))
             if path=='/api/incidents':return self.send(200,self.server.store.incidents(self.user(),parse_qs(urlparse(self.path).query).get('id',[None])[0]))
-            assets={'/':('index.html','text/html; charset=utf-8'),'/app.js':('app.js','text/javascript'),'/style.css':('style.css','text/css'),'/sw.js':('sw.js','text/javascript'),'/logo.png':('logo.png','image/png')}
+            assets={'/':('index.html','text/html; charset=utf-8'),'/app.js':('app.js','text/javascript'),'/style.css':('style.css','text/css'),'/sw.js':('sw.js','text/javascript'),'/logo.png':('logo.png','image/png'),'/training.js':('training.js','text/javascript'),'/classroom.html':('classroom.html','text/html; charset=utf-8'),'/classroom.js':('classroom.js','text/javascript')}
             if path not in assets:raise Problem('No encontrado',404)
             f,ct=assets[path];self.send(200,(ROOT/'static'/f).read_bytes(),ctype=ct)
         except Problem as e:self.send(e.status,{'error':e.message})
