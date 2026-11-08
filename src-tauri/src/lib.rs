@@ -11,6 +11,12 @@ struct AppState{vault:Mutex<Vault>,client:reqwest::Client}
 #[tauri::command]fn vault_read(state:State<AppState>)->Result<Option<serde_json::Value>,String>{let v=state.vault.lock().map_err(|_|"Error local")?;if !v.unlocked(){return Err("Caja local bloqueada".into())}Ok(v.contents.record.clone())}
 #[tauri::command]fn vault_write(record:Option<serde_json::Value>,state:State<AppState>)->Result<(),String>{let mut v=state.vault.lock().map_err(|_|"Error local")?;if !v.unlocked(){return Err("Caja local bloqueada".into())}let old=v.contents.record.clone();v.contents.record=record;if let Err(e)=v.save(){v.contents.record=old;return Err(e)}Ok(())}
 #[tauri::command]fn vault_lock(state:State<AppState>)->Result<(),String>{state.vault.lock().map_err(|_|"Error local")?.lock();Ok(())}
+#[tauri::command]fn materials_key(user_id:String,state:State<AppState>)->Result<String,String>{
+ let mut v=state.vault.lock().map_err(|_|"Error local")?;
+ if !v.unlocked()||v.contents.record.as_ref().and_then(|r|r.pointer("/state/user/id")).and_then(|x|x.as_str())!=Some(user_id.as_str()){return Err("Identifícate en Basurto antes de abrir materiales".into())}
+ if let Some(key)=v.contents.materials_keys.get(&user_id){return Ok(key.clone())}
+ use rand::RngCore;let mut bytes=[0u8;32];rand::rngs::OsRng.fill_bytes(&mut bytes);let key=STANDARD.encode(bytes);v.contents.materials_keys.insert(user_id.clone(),key.clone());if let Err(e)=v.save(){v.contents.materials_keys.remove(&user_id);return Err(e)}Ok(key)
+}
 #[derive(Deserialize)]struct ApiInput{path:String,method:String,body:Option<String>,headers:std::collections::HashMap<String,String>}
 #[derive(Serialize)]struct ApiOutput{status:u16,body:String,headers:std::collections::HashMap<String,String>}
 #[tauri::command]async fn api_request(input:ApiInput,state:State<'_,AppState>)->Result<ApiOutput,String>{
@@ -31,5 +37,5 @@ struct AppState{vault:Mutex<Vault>,client:reqwest::Client}
 pub fn run(){tauri::Builder::default().setup(|app|{let dir=app.path().app_data_dir()?;std::fs::create_dir_all(&dir)?;
  #[cfg(unix)]{use std::os::unix::fs::PermissionsExt;std::fs::set_permissions(&dir,std::fs::Permissions::from_mode(0o700))?;}
  app.manage(AppState{vault:Mutex::new(Vault::new(dir.join("basurto.vault"))),client:reqwest::Client::builder().redirect(reqwest::redirect::Policy::none()).timeout(Duration::from_secs(90)).build()?});Ok(())})
- .invoke_handler(tauri::generate_handler![vault_status,vault_unlock,vault_read,vault_write,vault_lock,api_request])
+ .invoke_handler(tauri::generate_handler![vault_status,vault_unlock,vault_read,vault_write,vault_lock,materials_key,api_request])
  .run(tauri::generate_context!()).expect("No se pudo iniciar Basurto");}

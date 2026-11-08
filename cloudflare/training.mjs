@@ -1,6 +1,7 @@
 import { Problem, digest } from './store.mjs';
 import seedSignals from './signals-seed.json' with { type: 'json' };
 export const TRAINING_SCHEMA=`
+CREATE TABLE IF NOT EXISTS training_local_materials(id TEXT PRIMARY KEY,title TEXT NOT NULL,filename TEXT NOT NULL,size INTEGER NOT NULL,fingerprint TEXT NOT NULL UNIQUE,published INTEGER NOT NULL DEFAULT 1,revision INTEGER NOT NULL DEFAULT 1,updated_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS training_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS training_assets(id TEXT PRIMARY KEY,owner_id TEXT NOT NULL,kind TEXT NOT NULL,mime TEXT NOT NULL,size INTEGER NOT NULL,filename TEXT NOT NULL,object_key TEXT UNIQUE NOT NULL,created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS training_signals(id TEXT PRIMARY KEY,code TEXT UNIQUE NOT NULL,name TEXT NOT NULL,meaning TEXT NOT NULL,category TEXT NOT NULL,source TEXT NOT NULL DEFAULT '',image_id TEXT,builtin_image TEXT,owner_id TEXT,published INTEGER NOT NULL DEFAULT 0,archived INTEGER NOT NULL DEFAULT 0,revision INTEGER NOT NULL DEFAULT 1,updated_at TEXT NOT NULL);
@@ -31,7 +32,7 @@ export class Training {
   const manuals=this.s.all('SELECT * FROM training_manuals WHERE archived=0'+(staff(user)?'':' AND published=1')+' ORDER BY title');
   const versions=manuals.length?this.s.all('SELECT v.*,a.filename,a.size FROM training_manual_versions v JOIN training_assets a ON a.id=v.asset_id JOIN training_manuals m ON m.id=v.manual_id WHERE m.archived=0'+(staff(user)?'':' AND m.published=1')+' ORDER BY v.number DESC'):[];
   const lessons=this.s.all('SELECT id,owner_id,title,description,revision,updated_at FROM training_lessons WHERE archived=0'+(staff(user)?'':' AND owner_id=?')+' ORDER BY updated_at DESC',...(staff(user)?[]:[user.id]));
-  return {signals:signals.map(s=>({...s,owner_id:staff(user)||s.owner_id===user.id?s.owner_id:null})),manuals,versions,lessons};
+  return {local_materials:this.s.all('SELECT * FROM training_local_materials'+(staff(user)?'':' WHERE published=1')+' ORDER BY title'),routes_plan:staff(user)?'premium':'basic',signals:signals.map(s=>({...s,owner_id:staff(user)||s.owner_id===user.id?s.owner_id:null})),manuals,versions,lessons};
  }
  // Validate each reference in the user's scope and pin exact PDF versions.
  slides(user,items){if(!Array.isArray(items)||items.length<1||items.length>60)throw new Problem('Añade entre 1 y 60 pasos a la clase');return items.map(d=>{
@@ -55,7 +56,17 @@ export class Training {
   const operation=req(data,'operation_id',100);const payload=digest(JSON.stringify(data));const prior=this.s.one('SELECT * FROM operations WHERE id=?',operation);
   if(prior){if(prior.user_id!==user.id||prior.payload!==payload)throw new Problem('Operación incompatible',409);return JSON.parse(prior.result)}
   let entity=data.id||id();const now=stamp();
-  if(data.action==='signal'){
+  if(data.action==='local_material'){
+   if(!staff(user))throw new Problem('Solo oficina publica material compartido',403);
+   const fingerprint=req(data,'fingerprint',64);if(!/^[a-f0-9]{64}$/.test(fingerprint)||!Number.isSafeInteger(data.size)||data.size<=0||data.size>50*1024**3)throw new Problem('Identificación de archivo inválida');
+   const filename=req(data,'filename',240);if(/[\\/\x00-\x1f]/.test(filename)||! /\.(mp4|mov|webm)$/i.test(filename))throw new Problem('Nombre de vídeo inválido');
+   const old=this.s.one('SELECT * FROM training_local_materials WHERE fingerprint=?',fingerprint);
+   if(old){revision(old,data);entity=old.id;this.s.run('UPDATE training_local_materials SET title=?,filename=?,size=?,published=1,revision=revision+1,updated_at=? WHERE id=?',req(data,'title'),filename,data.size,now,entity)}
+   else this.s.run('INSERT INTO training_local_materials(id,title,filename,size,fingerprint,updated_at) VALUES(?,?,?,?,?,?)',entity,req(data,'title'),filename,data.size,fingerprint,now);
+  }else if(data.action==='archive_local_material'){
+   if(!staff(user))throw new Problem('Solo oficina retira material compartido',403);
+   const old=this.s.one('SELECT * FROM training_local_materials WHERE id=? AND published=1',entity);if(!old)throw new Problem('Material no disponible',404);revision(old,data);this.s.run('UPDATE training_local_materials SET published=0,revision=revision+1,updated_at=? WHERE id=?',now,entity);
+  }else if(data.action==='signal'){
    const old=data.id?this.signal(user,entity):null;
    if(old){revision(old,data);if(!staff(user)&&(old.owner_id!==user.id||old.published))throw new Problem('Solo oficina puede editar señales publicadas',403)}
    if(!staff(user)&&data.published)throw new Problem('Oficina debe publicar las nuevas señales',403);

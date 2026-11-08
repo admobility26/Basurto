@@ -5,7 +5,7 @@ import { Training, validateUpload } from './training.mjs';
 const headers={
  'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer',
  'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; frame-src 'self'; worker-src 'self'; font-src 'self' blob: data:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
- 'Permissions-Policy':'camera=(), microphone=(), geolocation=()','Strict-Transport-Security':'max-age=31536000'
+ 'Permissions-Policy':'camera=(), microphone=(self), geolocation=()','Strict-Transport-Security':'max-age=31536000'
 };
 const json=(data,status=200,cookie)=>new Response(JSON.stringify(data),{status,headers:{...headers,'Content-Type':'application/json; charset=utf-8',...(cookie?{'Set-Cookie':cookie}:{})}});
 function cookie(token,request,expired=false){return 'basurto='+token+'; HttpOnly; SameSite=Strict; Path=/; Max-Age='+(expired?'0':'28800')+(new URL(request.url).protocol==='https:'?'; Secure':'')}
@@ -90,5 +90,5 @@ export default {async fetch(request,env){
  if(new URL(request.url).pathname.startsWith('/api/')){
   const namespace=env.LOCAL_DEVELOPMENT==='true'?env.OFFICE:env.OFFICE.jurisdiction('eu');return namespace.get(namespace.idFromName('basurto-office-v1')).fetch(request);
  }
- const response=await env.ASSETS.fetch(request),result=new Response(response.body,response);for(const [k,v] of Object.entries(headers))result.headers.set(k,v);if(new URL(request.url).pathname.replace(/\.html$/,'')==='/pdf-viewer')result.headers.set('Content-Security-Policy',headers['Content-Security-Policy'].replace("frame-ancestors 'none'","frame-ancestors 'self'"));return result;
+ const response=await env.ASSETS.fetch(request),result=new Response(response.body,response);for(const [k,v] of Object.entries(headers))result.headers.set(k,v);if(new URL(request.url).pathname.startsWith('/routes/')){result.headers.set('Content-Security-Policy',"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' blob: https://www.geo.euskadi.eus https://www.ign.es https://tile.openstreetmap.org https://www.cartociudad.es; img-src 'self' data: blob: https://www.geo.euskadi.eus https://www.ign.es https://tile.openstreetmap.org; media-src 'self' blob:; frame-src 'self' blob:; worker-src 'self' blob:; font-src 'self'; object-src 'none'; frame-ancestors 'self'; base-uri 'self'; form-action 'none'");result.headers.set('Referrer-Policy','strict-origin-when-cross-origin');result.headers.set('Permissions-Policy','camera=(), microphone=(self), geolocation=()')}if(new URL(request.url).pathname.replace(/\.html$/,'')==='/pdf-viewer')result.headers.set('Content-Security-Policy',headers['Content-Security-Policy'].replace("frame-ancestors 'none'","frame-ancestors 'self'"));return result;
 }};

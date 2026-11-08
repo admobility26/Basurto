@@ -1,0 +1,1 @@
+export async function readEncryptedBackup(value){if(value?.format!=='basurto-routes-encrypted-backup')return value;if(window.rutasVault)return window.rutasVault.decodeBackup(value);return window.RutasLocalVault.openBackup(value)}

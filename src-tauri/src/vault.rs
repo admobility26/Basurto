@@ -6,7 +6,7 @@ use std::{fs, path::PathBuf};
 use zeroize::{Zeroize, Zeroizing};
 const AAD:&[u8]=b"Basurto/native-vault/v1";
 #[derive(Default,Serialize,Deserialize,Clone)]
-pub struct Contents {pub cookie:String,pub record:Option<serde_json::Value>}
+pub struct Contents {pub cookie:String,pub record:Option<serde_json::Value>,#[serde(default)]pub materials_keys:std::collections::HashMap<String,String>}
 pub struct Vault {pub path:PathBuf,key:Option<Zeroizing<[u8;32]>>,salt:[u8;16],pub contents:Contents}
 impl Vault {
  pub fn new(path:PathBuf)->Self{Self{path,key:None,salt:[0;16],contents:Contents::default()}}
@@ -27,4 +27,6 @@ impl Vault {
  }
  pub fn lock(&mut self){self.key=None;self.contents.cookie.zeroize();self.contents=Contents::default()}
 }
-#[cfg(test)]mod tests{use super::*;#[test]fn encrypted_restart_wrong_key_and_tamper(){let p=std::env::temp_dir().join(format!("basurto-{}.vault",rand::random::<u64>()));let mut v=Vault::new(p.clone());v.unlock("Local-test-passphrase-123".into()).unwrap();v.contents.cookie="secret-cookie".into();v.contents.record=Some(serde_json::json!({"pending":[{"note":"private-student"}]}));v.save().unwrap();let b=fs::read(&p).unwrap();assert!(!String::from_utf8_lossy(&b).contains("private-student"));let mut reopened=Vault::new(p.clone());assert!(reopened.unlock("wrong-passphrase-123".into()).is_err());reopened.unlock("Local-test-passphrase-123".into()).unwrap();assert_eq!(reopened.contents.cookie,"secret-cookie");assert!(reopened.contents.record.is_some());reopened.lock();assert!(!reopened.unlocked());assert!(reopened.save().is_err());let mut damaged=b;let end=damaged.len()-1;damaged[end]^=1;fs::write(&p,damaged).unwrap();assert!(reopened.unlock("Local-test-passphrase-123".into()).is_err());fs::remove_file(p).unwrap();}}
+#[cfg(test)]mod tests{use super::*;#[test]fn encrypted_restart_wrong_key_and_tamper(){let p=std::env::temp_dir().join(format!("basurto-{}.vault",rand::random::<u64>()));let mut v=Vault::new(p.clone());v.unlock("Local-test-passphrase-123".into()).unwrap();v.contents.materials_keys.insert("teacher-1".into(),"private-materials-key".into());v.contents.cookie="secret-cookie".into();v.contents.record=Some(serde_json::json!({"pending":[{"note":"private-student"}]}));v.save().unwrap();let b=fs::read(&p).unwrap();assert!(!String::from_utf8_lossy(&b).contains("private-student"));let mut reopened=Vault::new(p.clone());assert!(reopened.unlock("wrong-passphrase-123".into()).is_err());reopened.unlock("Local-test-passphrase-123".into()).unwrap();assert_eq!(reopened.contents.materials_keys.get("teacher-1").unwrap(),"private-materials-key");assert_eq!(reopened.contents.cookie,"secret-cookie");assert!(reopened.contents.record.is_some());reopened.lock();assert!(!reopened.unlocked());assert!(reopened.save().is_err());let mut damaged=b;let end=damaged.len()-1;damaged[end]^=1;fs::write(&p,damaged).unwrap();assert!(reopened.unlock("Local-test-passphrase-123".into()).is_err());fs::remove_file(p).unwrap();}}
+
+#[cfg(test)]mod compatibility_tests{#[test]fn old_vault_has_empty_material_keys(){let old:super::Contents=serde_json::from_str(r#"{"cookie":"","record":null}"#).unwrap();assert!(old.materials_keys.is_empty());}}

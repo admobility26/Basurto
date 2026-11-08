@@ -1,0 +1,5 @@
+// SPDX-FileCopyrightText: 2026 Aitor Delgado Martínez · AD Mobility
+// SPDX-License-Identifier: LicenseRef-RutasAD-Educational-NonCommercial-1.0
+import React from 'react';
+const paths={users:<><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M22 21v-2a4 4 0 0 0-3-3.87"/><circle cx="9" cy="7" r="4"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></>,settings:<><path d="m12 3 2 3 3-1 1 3 3 2-2 3 1 3-4 1-2 4-3-2-3 1-1-4-4-2 2-3-1-3 4-1Z"/><circle cx="12" cy="12" r="3"/></>,up:<path d="m5 12 7-7 7 7M12 5v14"/>,down:<path d="m5 12 7 7 7-7M12 5v14"/>,move:<><path d="m8 5 4-4 4 4M12 1v22m-4-4 4 4 4-4M5 8l-4 4 4 4M1 12h22m-4-4 4 4-4 4"/></>,trash:<><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></>,board:<><rect x="3" y="3" width="18" height="14" rx="2"/><path d="m8 22 4-5 4 5M7 12l4-5 3 4 3-3"/></>,send:<><path d="M14 3h7v7M21 3l-9 9M10 4H4v16h16v-6"/></>};
+export default function ActionIcon({name}){return <svg className="action-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;}

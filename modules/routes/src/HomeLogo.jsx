@@ -1,0 +1,2 @@
+import React from 'react';
+export default function HomeLogo({className='',language='eu'}){return <button type="button" className="home-logo" title={language==='es'?'Volver al inicio':'Hasierara itzuli'} aria-label={language==='es'?'Volver al inicio':'Hasierara itzuli'} onClick={()=>window.dispatchEvent(new Event('basurto-routes:home'))}><img className={className} src="/logo.png" alt="Autoescuela Basurto"/></button>;}
