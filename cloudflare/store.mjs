@@ -15,6 +15,9 @@ export class Store {
  one(sql,...params){return this.all(sql,...params)[0]}
  run(sql,...params){return this.db.run(sql,...params)}
  tx(fn){return this.db.tx(fn)}
+ archived(kind,entity){return Boolean(this.one('SELECT 1 FROM archived_records WHERE kind=? AND entity=?',kind,entity))}
+ revision(row){return digest(JSON.stringify(canonical(row)))}
+ account(row){const {password,...safe}=row;return {...safe,revision:this.revision(row)}}
  setupAvailable(){return Boolean(this.env.ADMIN_EMAIL&&this.env.ADMIN_ACTIVATION_HASH&&Number(this.env.ADMIN_ACTIVATION_EXPIRES)>seconds()&&!this.one("SELECT 1 FROM users WHERE role IN ('admin','manager')"))}
  activate(data){return this.tx(()=>{
   const secret=required(data,'activation',100),username=required(data,'username',100),pass=password(data);
@@ -54,12 +57,12 @@ export class Store {
  bootstrap(user){const teacher=user.role==='teacher',p=teacher?[user.id]:[];
   const students=this.all('SELECT id,name,permit,teacher_id FROM students'+(teacher?' WHERE teacher_id=?':''),...p);
   const lessons=this.all('SELECT l.*,s.ratings,s.note,s.next_goal,s.minutes,s.updated_at FROM lessons l LEFT JOIN sheets s ON s.lesson_id=l.id WHERE '+(teacher?'l.teacher_id=? AND EXISTS(SELECT 1 FROM students st WHERE st.id=l.student_id AND st.teacher_id=?)':'1=1')+' ORDER BY l.start',...(teacher?[user.id,user.id]:[])).map(l=>({...l,ratings:l.ratings?JSON.parse(l.ratings):null}));
-  return {user:{id:user.id,name:user.name,role:user.role,expires:user.expires},csrf:user.csrf,students,lessons,vehicles:this.all('SELECT * FROM vehicles'),users:this.all('SELECT id,name,role FROM users WHERE active=1'+(teacher?' AND id=?':''),...p),goals:GOALS,server_time:now()};
+  return {user:{id:user.id,name:user.name,role:user.role,expires:user.expires},csrf:user.csrf,students:students.map(r=>({...r,revision:this.revision(r),archived:this.archived('student',r.id)})),lessons:lessons.map(r=>({...r,archived:this.archived('lesson',r.id)})),vehicles:this.all('SELECT * FROM vehicles').map(r=>({...r,archived:this.archived('vehicle',r.id)})),users:teacher?this.all('SELECT id,name,role,active FROM users WHERE id=?',user.id):this.all('SELECT * FROM users').map(r=>this.account(r)),incidents_revision:this.revision(this.incidents(user)),goals:GOALS,server_time:now()};
  }
- ownedLesson(user,entity){const row=this.one('SELECT l.* FROM lessons l JOIN students s ON s.id=l.student_id WHERE l.id=?'+(user.role==='teacher'?' AND l.teacher_id=? AND s.teacher_id=?':''),entity,...(user.role==='teacher'?[user.id,user.id]:[]));if(!row)throw new Problem('Clase no disponible',404);return row}
- ownedIncident(user,entity){const row=this.one('SELECT i.* FROM incidents i JOIN students s ON s.id=i.student_id WHERE i.id=?'+(user.role==='teacher'?' AND i.teacher_id=? AND s.teacher_id=?':''),entity,...(user.role==='teacher'?[user.id,user.id]:[]));if(!row)throw new Problem('Incidencia no disponible',404);return row}
+ ownedLesson(user,entity){const row=this.one('SELECT l.* FROM lessons l JOIN students s ON s.id=l.student_id WHERE l.id=?'+(user.role==='teacher'?' AND l.teacher_id=? AND s.teacher_id=?':''),entity,...(user.role==='teacher'?[user.id,user.id]:[]));if(!row)throw new Problem('Clase no disponible',404);if(this.archived('lesson',entity))throw new Problem('La clase fue eliminada en oficina. Conserva tu propuesta para revisarla.',409);return row}
+ ownedIncident(user,entity){const row=this.one('SELECT i.* FROM incidents i JOIN students s ON s.id=i.student_id WHERE i.id=?'+(user.role==='teacher'?' AND i.teacher_id=? AND s.teacher_id=?':''),entity,...(user.role==='teacher'?[user.id,user.id]:[]));if(!row||this.archived('incident',entity))throw new Problem('Incidencia no disponible',404);return row}
  incidents(user,entity){if(entity){const item=this.ownedIncident(user,entity);item.updates=this.all('SELECT id,author_id,note,status,created_at FROM incident_updates WHERE incident_id=? ORDER BY created_at,id',entity);this.run('INSERT INTO audit(actor,action,entity,at) VALUES(?,?,?,?)',user.id,'incident_read',entity,now());return item}
-  return this.all('SELECT i.id,i.lesson_id,i.student_id,i.vehicle_label,i.occurred_at,i.category,i.status,i.version FROM incidents i JOIN students s ON s.id=i.student_id'+(user.role==='teacher'?' WHERE i.teacher_id=? AND s.teacher_id=?':'')+' ORDER BY i.occurred_at DESC',...(user.role==='teacher'?[user.id,user.id]:[]));
+  return this.all('SELECT i.id,i.lesson_id,i.student_id,i.vehicle_label,i.occurred_at,i.category,i.status,i.version FROM incidents i JOIN students s ON s.id=i.student_id'+(user.role==='teacher'?' WHERE i.teacher_id=? AND s.teacher_id=?':'')+' ORDER BY i.occurred_at DESC,i.id',...(user.role==='teacher'?[user.id,user.id]:[])).filter(r=>!this.archived('incident',r.id));
  }
  mutate(user,data){return this.tx(()=>{
   const operation=required(data,'operation_id',100),payload=digest(JSON.stringify(canonical(data)));
@@ -81,16 +84,57 @@ export class Store {
    if(!['teacher','admin','manager'].includes(role))throw new Problem('Rol inválido');
    if(this.one('SELECT 1 FROM users WHERE username=?',username))throw new Problem('Ese usuario ya existe',409);
    this.run('INSERT INTO users VALUES(?,?,?,?,?,1)',entity,required(data,'name'),username,hash(password(data)),role);
+  }else if(action==='edit_user'){
+   if(!staff)throw new Problem('Solo oficina puede editar cuentas',403);
+   entity=required(data,'user_id');const target=this.one('SELECT * FROM users WHERE id=? AND active=1',entity);
+   if(!target)throw new Problem('Cuenta no disponible',404);
+   if(target.role==='admin'||entity===user.id)throw new Problem('Esta cuenta de administración está protegida',403);
+   if(data.revision!==this.revision(target))throw new Problem('La cuenta ha cambiado. Actualiza y vuelve a abrirla.',409);
+   const username=required(data,'username',100),name=required(data,'name');
+   if(this.one('SELECT 1 FROM users WHERE username=? AND id!=?',username,entity))throw new Problem('Ese usuario ya existe',409);
+   const pass=data.password?hash(password(data)):target.password;
+   this.run('UPDATE users SET name=?,username=?,password=? WHERE id=?',name,username,pass,entity);
+   if(username!==target.username||pass!==target.password){this.run('DELETE FROM sessions WHERE user_id=?',entity);this.run('DELETE FROM login_attempts WHERE username IN (?,?)',username,target.username)}
+  }else if(action==='delete_record'){
+   if(!staff)throw new Problem('Solo Administración y Gerencia pueden eliminar registros',403);
+   const kind=required(data,'kind',20),tables={user:'users',student:'students',vehicle:'vehicles',lesson:'lessons',incident:'incidents'};
+   if(!Object.hasOwn(tables,kind))throw new Problem('Tipo de registro inválido');
+   entity=required(data,'entity_id');const target=this.one('SELECT * FROM '+tables[kind]+' WHERE id=?',entity);
+   if(!target||this.archived(kind,entity))throw new Problem('Registro no disponible',404);
+   if(kind==='user'){
+    if(entity===user.id||target.role==='admin')throw new Problem('No puedes eliminar tu cuenta ni la administración principal',403);
+    if(data.revision!==this.revision(target))throw new Problem('La cuenta ha cambiado. Actualiza la lista.',409);
+    if(this.one("SELECT 1 FROM students s WHERE teacher_id=? AND NOT EXISTS(SELECT 1 FROM archived_records a WHERE a.kind='student' AND a.entity=s.id)",entity))throw new Problem('Este profesor tiene alumnos activos. Reasígnalos o elimina sus altas antes de eliminar la cuenta.',409);
+   }
+   if(['user','student','vehicle'].includes(kind)){
+    const condition=kind==='user'?'l.teacher_id=?':kind==='student'?'l.student_id=?':'(l.vehicle_id=? OR l.trailer_id=?)';
+    if(this.one("SELECT 1 FROM lessons l WHERE l.status='planned' AND l.end>? AND NOT EXISTS(SELECT 1 FROM archived_records a WHERE a.kind='lesson' AND a.entity=l.id) AND "+condition,now(),entity,...(kind==='vehicle'?[entity]:[])))throw new Problem('Tiene clases futuras programadas. Cambia el horario o cancela/elimina esas clases primero.',409);
+   }
+   if(['lesson','incident'].includes(kind)&&target.version!==data.version)throw new Problem('El registro ha cambiado. Actualiza antes de eliminar.',409);
+   this.run('INSERT INTO archived_records VALUES(?,?,?,?)',kind,entity,user.id,now());
+   if(kind==='user'){this.run('UPDATE users SET active=0 WHERE id=?',entity);this.run('DELETE FROM sessions WHERE user_id=?',entity)}
+   if(kind==='lesson')this.run('UPDATE lessons SET version=version+1 WHERE id=?',entity);
+  }else if(action==='edit_student'){
+   if(!staff)throw new Problem('Acceso no permitido',403);
+   entity=required(data,'student_id');const target=this.one('SELECT id,name,permit,teacher_id FROM students WHERE id=?',entity);
+   if(!target||this.archived('student',entity))throw new Problem('Alumno no disponible',404);
+   if(data.revision!==this.revision(target))throw new Problem('El alumno ha cambiado. Actualiza la lista.',409);
+   const teacher=required(data,'teacher_id');
+   if(!this.one("SELECT 1 FROM users WHERE id=? AND role='teacher' AND active=1",teacher))throw new Problem('Selecciona un profesor activo');
+   if(teacher!==target.teacher_id&&this.one("SELECT 1 FROM lessons l WHERE student_id=? AND status='planned' AND NOT EXISTS(SELECT 1 FROM archived_records a WHERE a.kind='lesson' AND a.entity=l.id)",entity))throw new Problem('Cancela o elimina las clases pendientes antes de cambiar de profesor.',409);
+   this.run('UPDATE students SET name=?,permit=?,teacher_id=? WHERE id=?',required(data,'name'),required(data,'permit',20),teacher,entity);
   }else if(action==='book'||action==='reschedule'){
    const student=this.one('SELECT * FROM students WHERE id=?',data.student_id??null);
-   if(!student||(!staff&&student.teacher_id!==user.id))throw new Problem('Alumno no disponible',403);
+   if(!student||this.archived('student',student.id)||(!staff&&student.teacher_id!==user.id))throw new Problem('Alumno no disponible',403);
    const teacher=student.teacher_id,vehicle=data.vehicle_id??null,trailer=data.trailer_id||null;
+   if(!this.one("SELECT 1 FROM users WHERE id=? AND active=1 AND role='teacher'",teacher))throw new Problem('Selecciona un profesor activo',409);
+   if(this.archived('vehicle',vehicle)||(trailer&&this.archived('vehicle',trailer)))throw new Problem('El vehículo fue eliminado. Actualiza la agenda.',409);
    if(!this.one("SELECT 1 FROM vehicles WHERE id=? AND kind!='trailer'",vehicle))throw new Problem('Selecciona un vehículo');
    if(trailer&&!this.one("SELECT 1 FROM vehicles WHERE id=? AND kind='trailer'",trailer))throw new Problem('Selecciona un remolque válido');
    const start=date(data.start),end=date(data.end);if(end<=start||Date.parse(end)-Date.parse(start)>28800000)throw new Problem('Horario inválido');
    if(!['Pistas','Circulación'].includes(data.mode))throw new Problem('Selecciona pistas o circulación');
    if(action==='reschedule'){entity=required(data,'lesson_id');const old=this.ownedLesson(user,entity);if(old.status!=='planned'||old.version!==data.version)throw new Problem('La clase ha cambiado. Actualiza la agenda.',409)}
-   if(this.one("SELECT 1 FROM lessons WHERE status!='cancelled' AND id!=? AND start<? AND end>? AND (teacher_id=? OR student_id=? OR vehicle_id=? OR trailer_id=? OR (? IS NOT NULL AND (vehicle_id=? OR trailer_id=?)))",entity,end,start,teacher,student.id,vehicle,vehicle,trailer,trailer,trailer))throw new Problem('Franja no disponible para el alumno, profesor o vehículo. Elige otro horario.',409);
+   if(this.one("SELECT 1 FROM lessons WHERE NOT EXISTS(SELECT 1 FROM archived_records a WHERE a.kind='lesson' AND a.entity=lessons.id) AND status!='cancelled' AND id!=? AND start<? AND end>? AND (teacher_id=? OR student_id=? OR vehicle_id=? OR trailer_id=? OR (? IS NOT NULL AND (vehicle_id=? OR trailer_id=?)))",entity,end,start,teacher,student.id,vehicle,vehicle,trailer,trailer,trailer))throw new Problem('Franja no disponible para el alumno, profesor o vehículo. Elige otro horario.',409);
    if(action==='book')this.run('INSERT INTO lessons(id,student_id,teacher_id,vehicle_id,trailer_id,start,end,mode) VALUES(?,?,?,?,?,?,?,?)',entity,student.id,teacher,vehicle,trailer,start,end,data.mode);
    else this.run('UPDATE lessons SET student_id=?,teacher_id=?,vehicle_id=?,trailer_id=?,start=?,end=?,mode=?,version=version+1 WHERE id=?',student.id,teacher,vehicle,trailer,start,end,data.mode,entity);
   }else if(action==='sheet'||action==='status'){

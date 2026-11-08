@@ -18,5 +18,12 @@ vm.createContext(context);let src=fs.readFileSync('static/app.js','utf8');src=sr
  assert.equal(await vm.runInContext(`state=null;pending=[];drafts={};restore()`,context),true);assert.equal(vm.runInContext('pending[0].data.note',context),'Pending after restart');
  context.fetch=async()=>({ok:true,json:async()=>({user:{id:'another-account'}})});await assert.rejects(()=>vm.runInContext('refresh()',context),/pendientes/);assert.equal(nativeRecord.state.user.id,'teacher-a');assert.equal(vm.runInContext('pending.length',context),1);
  await vm.runInContext('wipe()',context);assert.equal(nativeRecord,null);
+ let renderCount=0;context.recordRender=()=>renderCount++;
+ vm.runInContext(`render=()=>recordRender();state={user:{id:'office',expires:Date.now()/1000+3600},incidents_revision:'old'};pending=[];drafts={};offline=false;tab='incidents';`,context);
+ context.fetch=async()=>({ok:true,json:async()=>({user:{id:'office',expires:vm.runInContext('state.user.expires',context)},incidents_revision:'new',server_time:new Date().toISOString()})});
+ await vm.runInContext('sync()',context);assert.equal(renderCount,1,'An incident-only server change must refresh the view');
+ await assert.rejects(()=>vm.runInContext(`saveAction({action:'delete_record'})`,context),/conexión/);
+ await assert.rejects(()=>vm.runInContext(`saveAction({action:'edit_user',password:'private'})`,context),/conexión/);
+ assert.equal(vm.runInContext('pending.length',context),0);
  console.log('PASS: native encrypted adapter restart, expired-session pending retention, account isolation; encrypted cache, separate key/id, reload recovery, provisional offline reservation, wrong-key rejection and logout cleanup');
 })().catch(e=>{console.error(e);process.exitCode=1});

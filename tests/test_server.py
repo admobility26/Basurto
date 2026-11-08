@@ -41,4 +41,17 @@ class Tests(unittest.TestCase):
  def test_reassignment(self):
   with self.s.db() as c:c.execute("UPDATE students SET teacher_id='teacher-b' WHERE id='s1'")
   self.assertFalse(any(l['student_id']=='s1' for l in self.s.bootstrap(self.a)['lessons']));self.fails(404,lambda:self.s.mutate(self.a,dict(action='status',operation_id='x',lesson_id='lesson-0',version=1,status='cancelled')))
+ def test_management_archive_and_offline_conflict(self):
+  self.s.mutate(self.a,self.sheet())
+  data=dict(action='delete_record',operation_id='remove',kind='lesson',entity_id='lesson-0',version=2)
+  self.fails(403,lambda:self.s.mutate(self.a,data));self.s.mutate(self.admin,data)
+  self.assertTrue(next(l for l in self.s.bootstrap(self.admin)['lessons'] if l['id']=='lesson-0')['archived'])
+  self.fails(409,lambda:self.s.mutate(self.a,self.sheet(operation_id='offline',version=2)))
+  with self.s.db() as c:self.assertEqual(c.execute('SELECT count(*) FROM sheets').fetchone()[0],1)
+ def test_admin_edits_manager(self):
+  row=next(u for u in self.s.bootstrap(self.admin)['users'] if u['id']=='manager')
+  data=dict(action='edit_user',operation_id='edit',user_id='manager',revision=row['revision'],name='Gerente actualizado',username='gerente',password='New-test-password-123')
+  self.fails(403,lambda:self.s.mutate(self.a,data));self.s.mutate(self.admin,data)
+  self.assertEqual(next(u for u in self.s.bootstrap(self.admin)['users'] if u['id']=='manager')['name'],'Gerente actualizado')
+  self.fails(409,lambda:self.s.mutate(self.admin,dict(data,operation_id='stale')))
 if __name__=='__main__':unittest.main()

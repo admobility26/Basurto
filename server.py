@@ -1,4 +1,5 @@
 """Basurto: local Chrome pilot. Only stdlib; no personal data in source control."""
+import management
 import argparse, datetime as dt, getpass, hashlib, hmac, json, os, secrets, sqlite3, time
 from contextlib import contextmanager
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
@@ -27,6 +28,7 @@ class Store:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         with self.db() as c:
             c.executescript('''
+            CREATE TABLE IF NOT EXISTS archived_records(kind TEXT NOT NULL, entity TEXT NOT NULL, actor TEXT NOT NULL, at TEXT NOT NULL, PRIMARY KEY(kind,entity));
             CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY, name TEXT NOT NULL, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('teacher','admin','manager')), active INTEGER NOT NULL DEFAULT 1);
             CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), csrf TEXT NOT NULL, expires REAL NOT NULL);
             CREATE TABLE IF NOT EXISTS students(id TEXT PRIMARY KEY, name TEXT NOT NULL, permit TEXT NOT NULL, teacher_id TEXT NOT NULL REFERENCES users(id), reference TEXT NOT NULL DEFAULT '');
@@ -116,7 +118,10 @@ class Store:
             for lesson in lessons:
                 if lesson['ratings']: lesson['ratings']=json.loads(lesson['ratings'])
             users=[dict(r) for r in c.execute('SELECT id,name,role FROM users WHERE active=1'+(' AND id=?' if teacher else ''),(user['id'],) if teacher else ())]
-            return dict(user={k:user[k] for k in ('id','name','role','expires')}, csrf=user['csrf'],students=students,lessons=lessons,vehicles=[dict(r) for r in c.execute('SELECT * FROM vehicles')],users=users,goals=GOALS,server_time=now())
+            students=[dict(r,revision=management.revision(r),archived=management.archived(c,'student',r['id'])) for r in students]
+            lessons=[dict(r,archived=management.archived(c,'lesson',r['id'])) for r in lessons]
+            if not teacher: users=[management.account(r) for r in c.execute('SELECT * FROM users')]
+            return dict(user={k:user[k] for k in ('id','name','role','expires')}, csrf=user['csrf'],students=students,lessons=lessons,vehicles=[dict(r,archived=management.archived(c,'vehicle',r['id'])) for r in c.execute('SELECT * FROM vehicles')],users=users,incidents_revision=hashlib.sha256(json.dumps(self.incidents(user),sort_keys=True).encode()).hexdigest(),goals=GOALS,server_time=now())
     def mutate(self, user, data):
         operation=required(data,'operation_id',100)
         payload=hashlib.sha256(json.dumps(data,sort_keys=True).encode()).hexdigest()
@@ -148,6 +153,8 @@ class Store:
                 if role not in ('teacher','admin','manager') or not isinstance(password,str) or not 12<=len(password)<=200: raise Problem('Selecciona un rol y una contraseña de 12 a 200 caracteres')
                 try: c.execute('INSERT INTO users VALUES(?,?,?,?,?,1)',(entity,required(data,'name'),username,password_hash(password),role))
                 except sqlite3.IntegrityError: raise Problem('Ese usuario ya existe',409)
+            elif action in ('edit_user','delete_record','edit_student'):
+                entity=management.mutate(c,user,data,required,Problem,password_hash,now)
             elif action=='incident':
                 lesson=self.owned_lesson(c,user,required(data,'lesson_id'))
                 if lesson['status'] in ('cancelled','absent'): raise Problem('No se puede registrar una incidencia en una clase cancelada o con ausencia',409)
@@ -177,8 +184,10 @@ class Store:
                 c.execute('UPDATE incidents SET status=?,version=version+1 WHERE id=?',(status,entity))
             elif action in ('book','reschedule'):
                 student=c.execute('SELECT * FROM students WHERE id=?',(data.get('student_id'),)).fetchone()
-                if not student or (not staff and student['teacher_id']!=user['id']): raise Problem('Alumno no disponible',403)
+                if not student or management.archived(c,'student',student['id']) or (not staff and student['teacher_id']!=user['id']): raise Problem('Alumno no disponible',403)
                 teacher=student['teacher_id']; vehicle=data.get('vehicle_id');trailer=data.get('trailer_id') or None
+                if not c.execute("SELECT 1 FROM users WHERE id=? AND role='teacher' AND active=1",(teacher,)).fetchone(): raise Problem('Selecciona un profesor activo',409)
+                if management.archived(c,'vehicle',vehicle) or (trailer and management.archived(c,'vehicle',trailer)): raise Problem('El vehículo fue eliminado. Actualiza la agenda.',409)
                 if not c.execute("SELECT 1 FROM vehicles WHERE id=? AND kind!='trailer'",(vehicle,)).fetchone(): raise Problem('Selecciona un vehículo')
                 if trailer and not c.execute("SELECT 1 FROM vehicles WHERE id=? AND kind='trailer'",(trailer,)).fetchone(): raise Problem('Selecciona un remolque válido')
                 try:
@@ -192,7 +201,7 @@ class Store:
                     entity=required(data,'lesson_id'); old=self.owned_lesson(c,user,entity)
                     if old['status']!='planned' or old['version']!=data.get('version'): raise Problem('La clase ha cambiado. Actualiza la agenda.',409)
                 # Serialized check+write prevents races across all teachers and shared resources.
-                collision=c.execute("SELECT 1 FROM lessons WHERE status!='cancelled' AND id!=? AND start<? AND end>? AND (teacher_id=? OR student_id=? OR vehicle_id=? OR trailer_id=? OR (? IS NOT NULL AND (vehicle_id=? OR trailer_id=?)))",(entity,end,start,teacher,student['id'],vehicle,vehicle,trailer,trailer,trailer)).fetchone()
+                collision=c.execute("SELECT 1 FROM lessons WHERE NOT EXISTS(SELECT 1 FROM archived_records a WHERE a.kind='lesson' AND a.entity=lessons.id) AND status!='cancelled' AND id!=? AND start<? AND end>? AND (teacher_id=? OR student_id=? OR vehicle_id=? OR trailer_id=? OR (? IS NOT NULL AND (vehicle_id=? OR trailer_id=?)))",(entity,end,start,teacher,student['id'],vehicle,vehicle,trailer,trailer,trailer)).fetchone()
                 if collision: raise Problem('Franja no disponible para el alumno, profesor o vehículo. Elige otro horario.',409)
                 if action=='book': c.execute('INSERT INTO lessons(id,student_id,teacher_id,vehicle_id,trailer_id,start,end,mode) VALUES(?,?,?,?,?,?,?,?)',(entity,student['id'],teacher,vehicle,trailer,start,end,mode))
                 else: c.execute('UPDATE lessons SET student_id=?,teacher_id=?,vehicle_id=?,trailer_id=?,start=?,end=?,mode=?,version=version+1 WHERE id=?',(student['id'],teacher,vehicle,trailer,start,end,mode,entity))
@@ -222,10 +231,11 @@ class Store:
     def owned_lesson(self,c,user,entity):
         l=c.execute('SELECT l.* FROM lessons l JOIN students s ON s.id=l.student_id WHERE l.id=?'+(' AND l.teacher_id=? AND s.teacher_id=?' if user['role']=='teacher' else ''),(entity,user['id'],user['id']) if user['role']=='teacher' else (entity,)).fetchone()
         if not l: raise Problem('Clase no disponible',404)
+        if management.archived(c,'lesson',entity): raise Problem('La clase fue eliminada en oficina. Conserva tu propuesta para revisarla.',409)
         return l
     def owned_incident(self,c,user,entity):
         incident=c.execute('SELECT i.* FROM incidents i JOIN students s ON s.id=i.student_id WHERE i.id=?'+(' AND i.teacher_id=? AND s.teacher_id=?' if user['role']=='teacher' else ''),(entity,user['id'],user['id']) if user['role']=='teacher' else (entity,)).fetchone()
-        if not incident: raise Problem('Incidencia no disponible',404)
+        if not incident or management.archived(c,'incident',entity): raise Problem('Incidencia no disponible',404)
         return incident
     def incidents(self,user,entity=None):
         with self.db() as c:
@@ -234,7 +244,7 @@ class Store:
                 item['updates']=[dict(r) for r in c.execute('SELECT id,author_id,note,status,created_at FROM incident_updates WHERE incident_id=? ORDER BY created_at,id',(entity,))]
                 c.execute('INSERT INTO audit(actor,action,entity,at) VALUES(?,?,?,?)',(user['id'],'incident_read',entity,now()))
                 return item
-            return [dict(r) for r in c.execute('SELECT i.id,i.lesson_id,i.student_id,i.vehicle_label,i.occurred_at,i.category,i.status,i.version FROM incidents i JOIN students s ON s.id=i.student_id'+(' WHERE i.teacher_id=? AND s.teacher_id=?' if user['role']=='teacher' else '')+' ORDER BY i.occurred_at DESC',(user['id'],user['id']) if user['role']=='teacher' else ())]
+            return [dict(r) for r in c.execute('SELECT i.id,i.lesson_id,i.student_id,i.vehicle_label,i.occurred_at,i.category,i.status,i.version FROM incidents i JOIN students s ON s.id=i.student_id'+(' WHERE i.teacher_id=? AND s.teacher_id=?' if user['role']=='teacher' else '')+' ORDER BY i.occurred_at DESC,i.id',(user['id'],user['id']) if user['role']=='teacher' else ()) if not management.archived(c,'incident',r['id'])]
     def reset_demo_passwords(self):
         credentials=[]
         with self.db() as c:

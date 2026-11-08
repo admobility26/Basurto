@@ -32,3 +32,62 @@ test('correct password and wrong area gives clear guidance without password lock
 test('admin recovery is scoped, expiring, single-use and revokes old sessions without losing data',()=>{const f=fixture(),s=f.s;const original=s.login({username:'office@example.test',password:pass}).token;const before=s.all('SELECT * FROM students');s.env.ADMIN_RECOVERY_HASH=digest('recovery-test');s.env.ADMIN_RECOVERY_EXPIRES=Date.now()/1000+300;const data={username:'office@example.test',recovery:'recovery-test',password:'New-private-password-456',confirmation:'New-private-password-456'};denies(403,()=>s.recover({...data,username:'a'}));denies(403,()=>s.recover({...data,recovery:'invalid'}));denies(400,()=>s.recover({...data,confirmation:'different'}));s.env.ADMIN_RECOVERY_EXPIRES=0;denies(403,()=>s.recover(data));s.env.ADMIN_RECOVERY_EXPIRES=Date.now()/1000+300;assert.deepEqual(s.recover(data),{ok:true});denies(401,()=>s.authenticate(original));denies(401,()=>s.login({username:data.username,password:pass}));assert.equal(s.authenticate(s.login({username:data.username,password:data.password,role:'admin'}).token).role,'admin');denies(403,()=>s.recover(data));assert.deepEqual(s.all('SELECT * FROM students'),before);assert.equal(s.authenticate(s.login({username:'a',password:pass}).token).role,'teacher')});
 
 test('administrator creates manager with password and server-enforced manager permissions',()=>{const f=fixture();const data={action:'create_user',name:'Gerente de prueba',username:'manager-test',password:pass,role:'manager'};denies(403,()=>f.act(f.a,data));const created=f.act(f.admin,data);const manager=f.s.authenticate(f.s.login({username:'manager-test',password:pass,role:'manager'}).token);assert.equal(manager.id,created.id);assert.equal(manager.role,'manager');assert.equal(f.s.bootstrap(manager).students.length,2);assert(!JSON.stringify(f.db.all('SELECT * FROM operations')).includes(pass));denies(401,()=>f.s.login({username:'manager-test',password:'wrong',role:'manager'}))});
+
+test('incident changes sync between independent sessions without leaking another teacher or narratives',()=>{
+ const f=fixture(),second=f.s.authenticate(f.s.login({username:'office@example.test',password:pass}).token);
+ const before=f.s.bootstrap(second),other=f.s.bootstrap(f.b),lesson=f.act(f.a,f.booking).id;
+ const incident=f.act(f.a,{action:'incident',lesson_id:lesson,category:'accident',occurred_at:f.booking.start,location:'Pista',description:'Private narrative',measures:'Private measures'}).id;
+ assert.notEqual(f.s.bootstrap(second).incidents_revision,before.incidents_revision);
+ assert.equal(f.s.bootstrap(f.b).incidents_revision,other.incidents_revision);
+ assert(!JSON.stringify(f.s.bootstrap(second)).includes('Private narrative'));
+ assert.equal(f.s.incidents(second)[0].id,incident);
+ const revision=f.s.bootstrap(second).incidents_revision;
+ f.act(f.admin,{action:'incident_update',incident_id:incident,version:1,note:'Seguimiento',status:'reviewing'});
+ assert.notEqual(f.s.bootstrap(second).incidents_revision,revision);
+ denies(403,()=>f.act(f.a,{action:'delete_record',kind:'incident',entity_id:incident,version:2}));
+ f.act(f.admin,{action:'delete_record',kind:'incident',entity_id:incident,version:2});
+ assert.equal(f.s.incidents(second).length,0);assert.equal(f.db.all('SELECT * FROM incident_updates').length,1);
+});
+test('admin edits manager credentials, revokes sessions, preserves role, rejects stale and unauthorized edits',()=>{
+ const f=fixture(),mid=f.act(f.admin,{action:'create_user',name:'Manager',username:'manager',role:'manager',password:pass}).id;
+ const token=f.s.login({username:'manager',password:pass}).token;
+ const row=f.s.bootstrap(f.admin).users.find(u=>u.id===mid);assert(!('password' in row));
+ const edit={action:'edit_user',user_id:mid,revision:row.revision,name:'Gerencia',username:'new-manager',password:'Changed-password-456',role:'admin'};
+ denies(403,()=>f.act(f.a,edit));f.act(f.admin,edit);denies(401,()=>f.s.authenticate(token));
+ assert.equal(f.s.authenticate(f.s.login({username:edit.username,password:edit.password}).token).role,'manager');
+ denies(409,()=>f.act(f.admin,edit));
+ assert(!JSON.stringify(f.db.all('SELECT * FROM operations')).includes(edit.password));
+ denies(403,()=>f.act(f.admin,{...edit,user_id:f.admin.id}));
+});
+test('administration and manager remove records without erasing history; offline sheets cannot resurrect lessons',()=>{
+ const f=fixture(),mid=f.act(f.admin,{action:'create_user',name:'M',username:'m',role:'manager',password:pass}).id;
+ const manager=f.s.authenticate(f.s.login({username:'m',password:pass}).token);
+ const lesson=f.act(f.a,f.booking).id;
+ const sheet={action:'sheet',lesson_id:lesson,version:1,ratings:{[GOALS[0]]:2},next_goal:'Practicar',minutes:45};f.act(f.a,sheet);
+ denies(403,()=>f.act(f.a,{action:'delete_record',kind:'lesson',entity_id:lesson,version:2}));
+ denies(409,()=>f.act(manager,{action:'delete_record',kind:'lesson',entity_id:lesson,version:1}));
+ const removal={action:'delete_record',kind:'lesson',entity_id:lesson,version:2,operation_id:'remove-once'};
+ f.s.mutate(manager,removal);f.s.mutate(manager,removal);
+ assert.equal(f.db.all('SELECT * FROM sheets').length,1);
+ assert.equal(f.s.bootstrap(f.admin).lessons[0].archived,true);
+ denies(409,()=>f.act(f.a,{...sheet,version:2}));
+ f.act(f.a,f.booking); // Freed slot, even if the removed class had been completed.
+ for(const kind of ['student','vehicle']){const entity_id=kind==='student'?f.sa:f.v;f.act(manager,{action:'delete_record',kind,entity_id})}
+ denies(403,()=>f.act(f.a,f.booking));
+ const teacherRow=f.s.bootstrap(f.admin).users.find(u=>u.id===f.a.id);
+ f.act(f.admin,{action:'delete_record',kind:'user',entity_id:f.a.id,revision:teacherRow.revision});
+ denies(401,()=>f.s.login({username:'a',password:pass}));
+ denies(403,()=>f.act(manager,{action:'delete_record',kind:'user',entity_id:mid}));
+ denies(403,()=>f.act(manager,{action:'delete_record',kind:'user',entity_id:f.admin.id}));
+});
+test('future bookings block resource removal; student reassignment requires resolution and revokes teacher visibility',()=>{
+ const f=fixture(),lesson=f.act(f.a,{...f.booking,start:'2099-01-01T09:00:00Z',end:'2099-01-01T10:00:00Z'}).id;
+ for(const [kind,entity_id]of [['student',f.sa],['vehicle',f.v]])denies(409,()=>f.act(f.admin,{action:'delete_record',kind,entity_id}));
+ const row=f.s.bootstrap(f.admin).students.find(s=>s.id===f.sa),edit={action:'edit_student',student_id:f.sa,revision:row.revision,name:row.name,permit:row.permit,teacher_id:f.b.id};
+ denies(409,()=>f.act(f.admin,edit));
+ f.act(f.admin,{action:'delete_record',kind:'lesson',entity_id:lesson,version:1});
+ f.act(f.admin,edit);assert(!f.s.bootstrap(f.a).students.some(s=>s.id===f.sa));
+ denies(409,()=>f.act(f.admin,edit));
+ f.act(f.admin,{action:'delete_record',kind:'vehicle',entity_id:f.v});
+ denies(409,()=>f.act(f.b,{...f.booking,student_id:f.sb}));
+});
