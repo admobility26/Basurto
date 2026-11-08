@@ -91,3 +91,23 @@ test('future bookings block resource removal; student reassignment requires reso
  f.act(f.admin,{action:'delete_record',kind:'vehicle',entity_id:f.v});
  denies(409,()=>f.act(f.b,{...f.booking,student_id:f.sb}));
 });
+
+test('vehicle maintenance blocks bookings and offline retries across teachers, trailers and boundary times',()=>{
+ const f=fixture(),block={action:'vehicle_block',vehicle_id:f.v,kind:'maintenance',start:'2026-11-07T08:00:00Z',end:'2026-11-07T09:00:00Z',note:'Private workshop note'};
+ denies(403,()=>f.act(f.a,block));const created=f.act(f.admin,block);denies(409,()=>f.act(f.a,f.booking));denies(409,()=>f.act(f.b,{...f.booking,student_id:f.sb}));
+ const data=f.s.bootstrap(f.a);assert.equal(data.vehicle_blocks[0].id,created.id);assert(!JSON.stringify(data).includes('Private workshop note'));assert.equal(f.s.bootstrap(f.admin).vehicle_blocks[0].note,block.note);
+ f.act(f.a,{...f.booking,start:'2026-11-07T09:00:00Z',end:'2026-11-07T10:00:00Z'});
+ const trailer=f.act(f.admin,{action:'vehicle',kind:'trailer',plate:'TRAILER123',name:'Remolque'}).id;
+ f.act(f.admin,{...block,vehicle_id:trailer,start:'2026-11-08T00:00:00Z',end:null,kind:'breakdown'});
+ denies(409,()=>f.act(f.a,{...f.booking,trailer_id:trailer,start:'2026-11-10T08:00:00Z',end:'2026-11-10T09:00:00Z'}));
+ denies(409,()=>f.act(f.admin,{action:'release_vehicle_block',block_id:created.id,version:0}));denies(403,()=>f.act(f.a,{action:'release_vehicle_block',block_id:created.id,version:1}));
+ f.act(f.admin,{action:'release_vehicle_block',block_id:created.id,version:1});f.act(f.a,f.booking);assert.equal(f.db.all('SELECT active FROM vehicle_blocks WHERE id=?',created.id)[0].active,0);
+});
+test('breakdown preserves existing classes, managers edit blocks and stale edits are rejected',()=>{
+ const f=fixture(),lesson=f.act(f.a,f.booking).id;f.act(f.admin,{action:'create_user',name:'Manager',username:'manager',password:pass,role:'manager'});const manager=f.s.authenticate(f.s.login({username:'manager',password:pass}).token);
+ const data={action:'vehicle_block',vehicle_id:f.v,start:f.booking.start,end:null,kind:'breakdown'},block=f.act(manager,data).id;
+ assert.equal(f.s.bootstrap(f.a).lessons[0].id,lesson);assert.equal(f.s.bootstrap(f.a).vehicle_blocks.length,1);
+ f.act(manager,{...data,action:'edit_vehicle_block',block_id:block,version:1,end:f.booking.end,kind:'inspection'});
+ denies(409,()=>f.act(f.admin,{...data,action:'edit_vehicle_block',block_id:block,version:1}));
+ denies(400,()=>f.act(manager,{...data,end:'2020-01-01T00:00:00Z'}));
+});

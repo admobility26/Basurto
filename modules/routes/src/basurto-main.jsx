@@ -17,6 +17,8 @@ function Workspace(){const [section,setSection]=useState('videos'),[error,setErr
 async function start(){
  if(parent===window||!parent.BasurtoRoutes)throw Error('Abre Formación → Recorridos desde Basurto.');
  session=await parent.BasurtoRoutes.connect(window,{flush,close});
+ window.basurtoCanCreateVideos=['admin','manager'].includes(session.user.role);
+ document.body.classList.toggle('teacher-materials',!window.basurtoCanCreateVideos);
  const secret=await session.localKey();
  window.basurtoNativeMaterials=Boolean(secret);
  vault=secret?await window.RutasLocalVault.unlock(session.user,secret):await new Promise(resolve=>root.render(<Unlock user={session.user} onReady={resolve}/>));

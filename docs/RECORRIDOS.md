@@ -1,10 +1,10 @@
-# Formación: recorridos y vídeos · 0.3.0
+# Formación: recorridos y vídeos · 0.3.1
 
 Primera integración de ElorrietaTrack en Basurto. Se abre en Formación → Recorridos y vídeos. La agenda sigue siendo la pantalla inicial. El mapa y la pizarra se cargan al entrar en su apartado.
 
 ## Accesos
 
-Se usa la sesión de Basurto. Administración y gerencia pueden publicar o retirar referencias de vídeos; los profesores consultan las publicadas y mantienen su propia biblioteca local. Las operaciones de publicación se validan en el servidor, con control de revisión para evitar sobrescrituras. No se importan cuentas, alumnos ni fichas de ElorrietaTrack.
+Se usa la sesión de Basurto. Administración y gerencia pueden publicar o retirar referencias de vídeos; los profesores consultan las publicadas y usan trayectorias y pizarra. La creación de vídeos está reservada a oficina. Las operaciones de publicación se validan en el servidor, con control de revisión para evitar sobrescrituras. No se importan cuentas, alumnos ni fichas de ElorrietaTrack.
 
 La etiqueta Premium identifica el acceso de oficina. Esta primera entrega incluye recorridos, pizarra y vídeos locales. El editor avanzado de vídeo con GPS/PIP de ElorrietaTrack todavía no está integrado.
 
@@ -36,3 +36,9 @@ Abrir el apartado y el editor una vez con conexión en Chrome, y descargar previ
 Pruebas automatizadas de servidor/permisos/revisiones, huella de archivos grandes, importación de recorridos y compatibilidad de la caja cifrada. Prueba visual local: apertura del mapa, pizarra, renombrado y recuperación del proyecto tras volver a agenda. Instaladores compilados para macOS universal, Android ARM y Windows x64. Pendiente prueba de reproducción y grabación con vídeos reales en cada plataforma; los formatos compatibles dependen de sus códecs.
 
 Android conserva la firma privada de las versiones anteriores. Windows no tiene firma comercial y macOS no está notarizado por Apple.
+
+## Calendario de vehículos
+
+Vehículos muestra una semana de clases y bloqueos por matrícula, incluidos los remolques. Administración y gerencia registran mantenimiento, avería, ITV u otra indisponibilidad, con final previsto o hasta nuevo aviso. Los profesores ven disponibilidad y sus propias clases, sin notas privadas de taller. El servidor rechaza reservas que coincidan con un bloqueo, incluidas propuestas enviadas tras trabajar offline. Los bloqueos se crean y modifican con conexión; se sincronizan en la copia local. Las clases anteriores se conservan con aviso para reorganizarlas. Retirar un bloqueo conserva el historial.
+
+El alojamiento externo de vídeos se está valorando; no se ha contratado ni activado ningún proveedor. El módulo actual publica referencias y reproduce originales locales.

@@ -1429,6 +1429,7 @@ export default function App() {
     }
   };
   const exportVideo = async () => {
+    if(!window.basurtoCanCreateVideos)return;
     if (recording) {
       setPlaying(false);
       stopNarration();

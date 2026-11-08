@@ -57,7 +57,7 @@ export class Store {
  bootstrap(user){const teacher=user.role==='teacher',p=teacher?[user.id]:[];
   const students=this.all('SELECT id,name,permit,teacher_id FROM students'+(teacher?' WHERE teacher_id=?':''),...p);
   const lessons=this.all('SELECT l.*,s.ratings,s.note,s.next_goal,s.minutes,s.updated_at FROM lessons l LEFT JOIN sheets s ON s.lesson_id=l.id WHERE '+(teacher?'l.teacher_id=? AND EXISTS(SELECT 1 FROM students st WHERE st.id=l.student_id AND st.teacher_id=?)':'1=1')+' ORDER BY l.start',...(teacher?[user.id,user.id]:[])).map(l=>({...l,ratings:l.ratings?JSON.parse(l.ratings):null}));
-  return {user:{id:user.id,name:user.name,role:user.role,expires:user.expires},csrf:user.csrf,students:students.map(r=>({...r,revision:this.revision(r),archived:this.archived('student',r.id)})),lessons:lessons.map(r=>({...r,archived:this.archived('lesson',r.id)})),vehicles:this.all('SELECT * FROM vehicles').map(r=>({...r,archived:this.archived('vehicle',r.id)})),users:teacher?this.all('SELECT id,name,role,active FROM users WHERE id=?',user.id):this.all('SELECT * FROM users').map(r=>this.account(r)),incidents_revision:this.revision(this.incidents(user)),goals:GOALS,server_time:now()};
+  return {user:{id:user.id,name:user.name,role:user.role,expires:user.expires},csrf:user.csrf,students:students.map(r=>({...r,revision:this.revision(r),archived:this.archived('student',r.id)})),lessons:lessons.map(r=>({...r,archived:this.archived('lesson',r.id)})),vehicle_blocks:this.all('SELECT * FROM vehicle_blocks WHERE active=1 ORDER BY start').map(({note,...row})=>teacher?row:{...row,note}),vehicles:this.all('SELECT * FROM vehicles').map(r=>({...r,archived:this.archived('vehicle',r.id)})),users:teacher?this.all('SELECT id,name,role,active FROM users WHERE id=?',user.id):this.all('SELECT * FROM users').map(r=>this.account(r)),incidents_revision:this.revision(this.incidents(user)),goals:GOALS,server_time:now()};
  }
  ownedLesson(user,entity){const row=this.one('SELECT l.* FROM lessons l JOIN students s ON s.id=l.student_id WHERE l.id=?'+(user.role==='teacher'?' AND l.teacher_id=? AND s.teacher_id=?':''),entity,...(user.role==='teacher'?[user.id,user.id]:[]));if(!row)throw new Problem('Clase no disponible',404);if(this.archived('lesson',entity))throw new Problem('La clase fue eliminada en oficina. Conserva tu propuesta para revisarla.',409);return row}
  ownedIncident(user,entity){const row=this.one('SELECT i.* FROM incidents i JOIN students s ON s.id=i.student_id WHERE i.id=?'+(user.role==='teacher'?' AND i.teacher_id=? AND s.teacher_id=?':''),entity,...(user.role==='teacher'?[user.id,user.id]:[]));if(!row||this.archived('incident',entity))throw new Problem('Incidencia no disponible',404);return row}
@@ -78,6 +78,16 @@ export class Store {
    if(!['car','motorcycle','truck','bus','trailer'].includes(kind))throw new Problem('Tipo de vehículo inválido');
    if(this.one('SELECT 1 FROM vehicles WHERE plate=?',plate))throw new Problem('Matrícula ya registrada',409);
    this.run('INSERT INTO vehicles VALUES(?,?,?,?)',entity,required(data,'name'),plate,kind);
+  }else if(action==='vehicle_block'||action==='edit_vehicle_block'){
+   if(!staff)throw new Problem('Solo oficina gestiona la disponibilidad de vehículos',403);
+   const vehicle=required(data,'vehicle_id'),start=date(data.start),end=data.end?date(data.end):null,kind=required(data,'kind',30),note=String(data.note||'').trim();
+   if(!this.one('SELECT 1 FROM vehicles WHERE id=?',vehicle)||this.archived('vehicle',vehicle))throw new Problem('Vehículo no disponible',404);
+   if(end&&end<=start)throw new Problem('El final debe ser posterior al inicio');
+   if(!['maintenance','breakdown','inspection','other'].includes(kind)||note.length>1000)throw new Problem('Datos del bloqueo inválidos');
+   if(action==='edit_vehicle_block'){entity=required(data,'block_id');const old=this.one('SELECT * FROM vehicle_blocks WHERE id=? AND active=1',entity);if(!old||old.version!==data.version)throw new Problem('El bloqueo ha cambiado. Actualiza la agenda.',409);this.run('UPDATE vehicle_blocks SET vehicle_id=?,start=?,end=?,kind=?,note=?,version=version+1 WHERE id=?',vehicle,start,end,kind,note,entity)}
+   else this.run('INSERT INTO vehicle_blocks(id,vehicle_id,start,end,kind,note) VALUES(?,?,?,?,?,?)',entity,vehicle,start,end,kind,note);
+  }else if(action==='release_vehicle_block'){
+   if(!staff)throw new Problem('Solo oficina puede liberar vehículos',403);entity=required(data,'block_id');const old=this.one('SELECT * FROM vehicle_blocks WHERE id=? AND active=1',entity);if(!old||old.version!==data.version)throw new Problem('El bloqueo ha cambiado. Actualiza la agenda.',409);this.run('UPDATE vehicle_blocks SET active=0,version=version+1 WHERE id=?',entity);
   }else if(action==='create_user'){
    if(!staff)throw new Problem('Solo oficina puede crear cuentas',403);const role=required(data,'role',20),username=required(data,'username',100);
    if(user.role==='admin'&&!['teacher','manager'].includes(role))throw new Problem('Administración puede crear profesores y gerentes',403);
@@ -135,6 +145,7 @@ export class Store {
    if(!['Pistas','Circulación'].includes(data.mode))throw new Problem('Selecciona pistas o circulación');
    if(action==='reschedule'){entity=required(data,'lesson_id');const old=this.ownedLesson(user,entity);if(old.status!=='planned'||old.version!==data.version)throw new Problem('La clase ha cambiado. Actualiza la agenda.',409)}
    if(this.one("SELECT 1 FROM lessons WHERE NOT EXISTS(SELECT 1 FROM archived_records a WHERE a.kind='lesson' AND a.entity=lessons.id) AND status!='cancelled' AND id!=? AND start<? AND end>? AND (teacher_id=? OR student_id=? OR vehicle_id=? OR trailer_id=? OR (? IS NOT NULL AND (vehicle_id=? OR trailer_id=?)))",entity,end,start,teacher,student.id,vehicle,vehicle,trailer,trailer,trailer))throw new Problem('Franja no disponible para el alumno, profesor o vehículo. Elige otro horario.',409);
+   if(this.one('SELECT 1 FROM vehicle_blocks WHERE active=1 AND vehicle_id IN (?,?) AND start<? AND (end IS NULL OR end>?)',vehicle,trailer,end,start))throw new Problem('Vehículo o remolque no disponible por mantenimiento, avería o ITV. Elige otro vehículo u horario.',409);
    if(action==='book')this.run('INSERT INTO lessons(id,student_id,teacher_id,vehicle_id,trailer_id,start,end,mode) VALUES(?,?,?,?,?,?,?,?)',entity,student.id,teacher,vehicle,trailer,start,end,data.mode);
    else this.run('UPDATE lessons SET student_id=?,teacher_id=?,vehicle_id=?,trailer_id=?,start=?,end=?,mode=?,version=version+1 WHERE id=?',student.id,teacher,vehicle,trailer,start,end,data.mode,entity);
   }else if(action==='sheet'||action==='status'){
