@@ -1,0 +1,9 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {canUseGpx,requireGpx,timeline,positionAt,trackGeometry,parseGpx} from '../modules/routes/src/gpxReview.js';
+const p=(x,time,segment=0)=>({coordinates:[x,43],time,segment});
+test('GPX creation restricted to authenticated office roles',()=>{for(const role of ['admin','manager']){assert(canUseGpx({role}));assert.doesNotThrow(()=>requireGpx({role}))}for(const user of [undefined,{}, {role:'teacher'},{role:'premium'}]){assert(!canUseGpx(user));assert.throws(()=>requireGpx(user))}});
+test('GPS clock interpolates elapsed time rather than sampling rate and applies video offset',()=>{const points=[p(0,10000),p(1,11000),p(10,20000)];assert.equal(timeline(points).duration,10);assert.deepEqual(positionAt(points,7,20,2),[5,43]);assert.deepEqual(positionAt(points,0,20,2),[0,43]);assert.deepEqual(positionAt(points,30,20),[10,43]);assert.deepEqual(positionAt(points,0,20,-5),[5,43])});
+test('recording gaps are not drawn or interpolated as a connecting road',()=>{const points=[p(0,0),p(1,1000),p(9,9000,1),p(10,10000,1)];assert.deepEqual(positionAt(points,5,10),[1,43]);assert.deepEqual(trackGeometry(points).geometry.coordinates,[[[0,43],[1,43]],[[9,43],[10,43]]])});
+test('untimed GPX has explicit proportional fallback and invalid duration is safe',()=>{const points=[p(0,null),p(1,null),p(2,null)];assert.equal(timeline(points).timed,false);assert.deepEqual(positionAt(points,5,10),[1,43]);assert.equal(positionAt(points,5,NaN),null);assert.equal(positionAt([],5,10),null)});
+test('untrusted GPX rejects entity declarations before parsing',()=>{assert.throws(()=>parseGpx('<!DOCTYPE gpx><gpx/>'),/declaraciones/);assert.throws(()=>parseGpx('<!ENTITY x "x">'),/declaraciones/);assert.throws(()=>parseGpx('x'.repeat(20*1024*1024+1)),/20 MB/)});
