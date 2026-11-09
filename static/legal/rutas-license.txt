@@ -1,0 +1,121 @@
+RutasAD — Licencia de pruebas y enseñanza sin uso comercial, versión 1.0
+SPDX-License-Identifier: LicenseRef-RutasAD-Educational-NonCommercial-1.0
+
+Copyright (c) 2026 Aitor Delgado Martínez · AD Mobility.
+Todos los derechos reservados, salvo los permisos expresamente concedidos aquí
+y los usos permitidos por la legislación aplicable.
+
+1. TITULAR Y ALCANCE
+
+Esta licencia regula la reutilización del código original y de las aportaciones
+protegibles de RutasAD cuya titularidad corresponda a Aitor Delgado Martínez.
+Que el código sea visible en GitHub no lo convierte en dominio público ni en
+software de libre explotación comercial. Esta es una licencia propia de código
+visible con restricciones de uso; no es una licencia de código abierto aprobada
+por la OSI.
+
+No se atribuyen al titular de RutasAD los derechos sobre bibliotecas, mapas,
+fuentes, documentos oficiales u otros componentes ajenos. Se excluyen de esta
+licencia y conservan sus licencias, titulares y condiciones originales; véase
+THIRD-PARTY-NOTICES.txt. Tampoco se atribuyen derechos sobre los datos personales,
+alumnos, GPX, vídeos, audios, notas ni otros contenidos aportados por los usuarios.
+
+2. PERMISO LIMITADO
+
+Se concede permiso no exclusivo para estudiar, ejecutar, copiar, adaptar y
+compartir el código cubierto por esta licencia únicamente con fines de prueba,
+evaluación, demostración y enseñanza, sin obtener beneficio económico o material,
+directo o indirecto, y cumpliendo íntegramente estas condiciones.
+
+No se concede permiso para vender, alquilar, sublicenciar comercialmente,
+monetizar con publicidad, ofrecer como servicio comercial ni incorporar el código
+a productos, servicios, cursos o actividades remuneradas. Que la copia del código
+se entregue gratuitamente no autoriza obtener beneficio material por otros medios.
+Cualquier uso distinto requiere autorización previa, expresa y por escrito del
+titular. El titular conserva la facultad de autorizar otros usos separadamente.
+
+Estas condiciones sobre reutilización del código no modifican las autorizaciones
+específicas otorgadas por el titular para utilizar sus propias instancias de la
+aplicación. Disponer de una cuenta de acceso a RutasAD no concede por sí mismo
+permiso para copiar o explotar comercialmente su código.
+
+3. ATRIBUCIÓN OBLIGATORIA
+
+Toda copia, adaptación, distribución o aplicación que reutilice este código debe
+mantener, de forma legible y visible, la atribución:
+
+    RutasAD — Autor: Aitor Delgado Martínez · AD Mobility.
+    Copyright (c) 2026 Aitor Delgado Martínez. Todos los derechos reservados.
+
+Debe conservarse esta licencia íntegra, el identificador de licencia y los avisos
+de autoría y de terceros, tanto en el código distribuido como en su documentación.
+En aplicaciones o demostraciones con interfaz, la atribución y un enlace o acceso
+a estas condiciones deben aparecer en el inicio o en un apartado de créditos
+claramente accesible. En material docente debe incluirse en los créditos.
+
+Las modificaciones deben identificarse como tales, sin atribuir su autoría al
+autor original ni dar a entender que este las respalda. No se permite eliminar,
+ocultar o sustituir la atribución ni presentar el trabajo original como propio.
+La atribución no autoriza un uso que incumpla las demás restricciones.
+
+4. DISTRIBUCIÓN Y COMPONENTES DE TERCEROS
+
+Solo se permite compartir el código cubierto y sus adaptaciones para los fines
+permitidos en el apartado 2, conservando estas condiciones sobre dicho código.
+No se pueden otorgar a terceros derechos comerciales sobre el código del titular
+sin su autorización. Las condiciones de las dependencias y de los contenidos de
+terceros prevalecen respecto de sus propios componentes; esta licencia no las
+restringe, sustituye ni amplía.
+
+Esta licencia tampoco concede derechos de uso independiente sobre marcas,
+logotipos o identidad visual, salvo su reproducción necesaria para la atribución
+y las demostraciones permitidas. No debe insinuarse afiliación o patrocinio.
+
+5. INCUMPLIMIENTO Y RESERVA DE ACCIONES
+
+El uso fuera de los permisos concedidos no está autorizado y exige su cese.
+El titular declara que denunciará los usos no autorizados ante los organismos
+competentes cuando proceda y ejercerá las acciones legales correspondientes para
+la defensa de sus derechos. Esto no constituye una sanción automática ni presupone
+la calificación jurídica de una conducta concreta.
+
+Se respetan las excepciones y los límites imperativos de la legislación aplicable,
+así como los derechos de visualización y bifurcación que resulten de las condiciones
+de GitHub aceptadas por el titular. No se pretende restringir derechos válidamente
+adquiridos sobre componentes ajenos o versiones con una autorización anterior.
+
+6. AUSENCIA DE GARANTÍAS
+
+El código se facilita tal cual, sin garantías de exactitud, disponibilidad,
+seguridad o idoneidad para un fin concreto, en la medida permitida por la ley.
+Es una herramienta de apoyo didáctico y no sustituye las normas de circulación,
+la formación profesional ni la atención a la conducción real. No se excluyen
+responsabilidades ni derechos que no puedan excluirse legalmente.
+
+7. REFERENCIAS E IDENTIFICACIÓN
+
+Como referencia para los derechos de autor y los programas de ordenador en España:
+Real Decreto Legislativo 1/1996, de 12 de abril, texto refundido de la Ley de
+Propiedad Intelectual; en particular, artículos 14 y 17 y el régimen de los
+programas de ordenador de los artículos 95 a 104, en su redacción vigente.
+Texto oficial: https://www.boe.es/buscar/act.php?id=BOE-A-1996-8930
+
+El símbolo ©, el aviso de copyright y el identificador LicenseRef identifican
+la autoría declarada y estas condiciones. No son números de inscripción en un
+registro público, certificados oficiales, patentes ni marcas registradas.
+
+Solicitudes de autorización: contactar con el titular a través de los canales
+oficiales de AD Mobility o del repositorio.
+
+ANEXO — USO AUTORIZADO DE ELORRIETATRACK
+
+El titular permite a los destinatarios a quienes concede una licencia de uso de
+ElorrietaTrack utilizar la aplicación en actividades profesionales y docentes
+remuneradas durante su vigencia y dentro de los equipos autorizados. La clave de
+escritorio se consume al activar un equipo; renovar amplía su plazo y no permite
+activar otro. Esta autorización expresa para usar la aplicación no autoriza a
+revender, sublicenciar o explotar su código ni a eludir la activación.
+Las cuentas web se rigen por la autorización de acceso concedida por el titular.
+No se restringen los derechos independientes que otorguen las licencias de mapas,
+bibliotecas u otros componentes de terceros, ni los derechos imperativos aplicables.
+Contacto y solicitudes de autorización: admobility26@gmail.com.
