@@ -1,0 +1,15 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import vm from 'node:vm';
+import {readFile} from 'node:fs/promises';
+import {IDBFactory,IDBKeyRange} from 'fake-indexeddb';
+import {byteRange,VIDEO_CHUNK} from '../modules/routes/src/usbMedia.js';
+const source=await readFile('modules/routes/public/account-vault.js','utf8');
+function context(){const ctx={indexedDB:new IDBFactory(),IDBKeyRange,crypto,TextEncoder,TextDecoder,Uint8Array,Blob,Map,Set,Promise,JSON,Number,String,Array,Error,btoa,atob,queueMicrotask,navigator:{},CustomEvent,localStorage:{},dispatchEvent:()=>{}};ctx.window=ctx;vm.runInNewContext(source,ctx);return ctx}
+test('range playback is bounded and validates suffix, overflow and malformed requests',()=>{assert.deepEqual(byteRange('bytes=0-',50*1024**3),[0,VIDEO_CHUNK-1]);assert.deepEqual(byteRange('bytes=-8',100),[92,99]);assert.deepEqual(byteRange('bytes=9-999',100),[9,99]);for(const range of ['bytes=100-','bytes=9-2','bytes=-0','bytes=-','bytes=1-2,3-4','bad'])assert.throws(()=>byteRange(range,100))});
+test('encrypted USB import survives reopen, decrypts only ranges, isolates accounts and cleans aborted imports',async()=>{
+ const ctx=context(),v=await ctx.RutasLocalVault.unlock({id:'one',role:'teacher'},'Fictitious-local-key-123');const bytes=new Uint8Array(3*1024*1024+7);for(let i=0;i<bytes.length;i++)bytes[i]=i%251;const file=new Blob([bytes],{type:'video/mp4'});let progress=0;await v.saveVideo('usb-sample',file,{onProgress:n=>progress=n});assert.equal(progress,file.size);assert.deepEqual(new Uint8Array(await v.readVideoRange('usb-sample',2097149,2097160)),bytes.slice(2097149,2097161));await assert.rejects(()=>v.readVideoRange('usb-sample',0,VIDEO_CHUNK));
+ const cancel=new AbortController();await assert.rejects(()=>v.saveVideo('usb-sample',new Blob([new Uint8Array(5*1024*1024)]),{signal:cancel.signal,onProgress:()=>cancel.abort()}),/cancelada/);assert.equal((await v.get('videos','usb-sample')).size,file.size);
+ await v.lock();await assert.rejects(()=>v.readVideoRange('usb-sample',0,1));const reopened=await ctx.RutasLocalVault.unlock({id:'one'},'Fictitious-local-key-123');assert.deepEqual(new Uint8Array(await reopened.readVideoRange('usb-sample',0,100)),bytes.slice(0,101));await reopened.lock();await assert.rejects(()=>ctx.RutasLocalVault.unlock({id:'one'},'Wrong-local-password-123'));const other=await ctx.RutasLocalVault.unlock({id:'two'},'Other-local-password-456');assert.equal(await other.get('videos','usb-sample'),undefined);await other.lock();
+});
+test('native playback and browser playback do not use whole-file decryption',async()=>{const adapter=await readFile('modules/routes/src/usbMedia.js','utf8');assert(!adapter.includes('.loadVideo('));assert(adapter.includes('readVideoRange'));const native=await readFile('src-tauri/src/media.rs','utf8');assert(native.includes('end.min(start+CHUNK-1)'));assert(native.includes('account(&v,owner)'));const sw=await readFile('modules/routes/public/media-sw.js','utf8');assert(sw.includes('e.clientId!==clientId'));assert(sw.includes("'Cache-Control':'no-store'"))});

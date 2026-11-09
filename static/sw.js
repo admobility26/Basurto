@@ -1,4 +1,4 @@
-const CACHE='basurto-shell-v12';
+const CACHE='basurto-shell-v13';
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(['/','/app.js','/style.css','/logo.png','/training.js','/vehicle-calendar.js','/routes-host.js','/classroom.html','/classroom.js']))));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('basurto-shell-')&&k!==CACHE).map(k=>caches.delete(k))))));
 self.addEventListener('fetch',e=>{const u=new URL(e.request.url);if(u.origin!==location.origin||u.pathname.startsWith('/api/')||e.request.method!=='GET')return;e.respondWith((async()=>{try{const response=await fetch(e.request);if(response.ok&&u.pathname.startsWith('/routes/')){const cache=await caches.open(CACHE);await cache.put(e.request,response.clone())}return response}catch(error){const saved=await caches.match(e.request);if(saved)return saved;throw error}})());});

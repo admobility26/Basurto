@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Basurto",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "identifier": "com.admobility.basurto",
   "build": {
     "frontendDist": "../native-dist",
@@ -21,7 +21,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://www.geo.euskadi.eus https://www.ign.es https://tile.openstreetmap.org; font-src 'self' data: blob:; connect-src 'self' ipc: http://ipc.localhost blob: https://www.geo.euskadi.eus https://www.ign.es https://tile.openstreetmap.org https://www.cartociudad.es; media-src 'self' blob:; frame-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'"
+      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://www.geo.euskadi.eus https://www.ign.es https://tile.openstreetmap.org; font-src 'self' data: blob:; connect-src 'self' ipc: http://ipc.localhost blob: https://www.geo.euskadi.eus https://www.ign.es https://tile.openstreetmap.org https://www.cartociudad.es; media-src 'self' blob: basurto-media: http://basurto-media.localhost https://basurto-media.localhost; frame-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'"
     },
     "withGlobalTauri": true
   },

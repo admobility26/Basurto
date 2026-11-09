@@ -1,4 +1,5 @@
 mod vault;
+mod media;
 use tauri::{Manager, State};
 use std::{sync::Mutex, time::Duration};
 use serde::{Deserialize, Serialize};
@@ -36,6 +37,8 @@ struct AppState{vault:Mutex<Vault>,client:reqwest::Client}
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run(){tauri::Builder::default().setup(|app|{let dir=app.path().app_data_dir()?;std::fs::create_dir_all(&dir)?;
  #[cfg(unix)]{use std::os::unix::fs::PermissionsExt;std::fs::set_permissions(&dir,std::fs::Permissions::from_mode(0o700))?;}
+ app.manage(media::MediaState(Mutex::new(media::MediaStore::new(dir.join("media")))));
  app.manage(AppState{vault:Mutex::new(Vault::new(dir.join("basurto.vault"))),client:reqwest::Client::builder().redirect(reqwest::redirect::Policy::none()).timeout(Duration::from_secs(90)).build()?});Ok(())})
- .invoke_handler(tauri::generate_handler![vault_status,vault_unlock,vault_read,vault_write,vault_lock,materials_key,api_request])
+ .register_asynchronous_uri_scheme_protocol("basurto-media",|ctx,request,responder|{let app=ctx.app_handle().clone();std::thread::spawn(move||responder.respond(media::respond(&app,request)));})
+ .invoke_handler(tauri::generate_handler![vault_status,vault_unlock,vault_read,vault_write,vault_lock,materials_key,api_request,media::media_request])
  .run(tauri::generate_context!()).expect("No se pudo iniciar Basurto");}

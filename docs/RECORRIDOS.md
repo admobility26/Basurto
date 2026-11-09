@@ -1,4 +1,4 @@
-# Formación: recorridos y vídeos · 0.3.1
+# Formación: recorridos y vídeos · 0.3.2
 
 Primera integración de ElorrietaTrack en Basurto. Se abre en Formación → Recorridos y vídeos. La agenda sigue siendo la pantalla inicial. El mapa y la pizarra se cargan al entrar en su apartado.
 
@@ -13,7 +13,7 @@ La etiqueta Premium identifica el acceso de oficina. Esta primera entrega incluy
 - Agenda, alumnos, fichas e incidencias: base central existente de Basurto.
 - Referencias de vídeos publicadas: base central; título, nombre de archivo, tamaño y una huella parcial para reconocer el original. Nunca se envían los bytes del vídeo.
 - Proyectos, trayectorias, pizarras y catálogo privado de vídeos: biblioteca cifrada por cuenta en cada dispositivo.
-- Vídeos originales: carpeta elegida por la persona. Se reproducen directamente, sin duplicarlos ni subirlos a R2. Hay que seleccionarlos de nuevo para autorizar su lectura tras cerrar el módulo.
+- Vídeos originales: carpeta elegida por la persona. Se distribuyen por pendrive; al importar se crea una copia local cifrada, sin subirla a R2. Después se reproducen desde la biblioteca sin volver a seleccionar el original.
 - Mapas descargados: caché local de las zonas elegidas de geoEuskadi/IGN. OpenStreetMap necesita conexión y no se descarga por lotes. La caché de cartografía no está cifrada.
 - Los manuales e imágenes ya existentes en Formación mantienen su almacenamiento anterior.
 
@@ -29,7 +29,7 @@ Los archivos originales y los vídeos exportados no se cifran por esta función.
 
 ## Sin conexión
 
-Abrir el apartado y el editor una vez con conexión en Chrome, y descargar previamente la zona del mapa que se vaya a usar. En los instaladores el editor está incluido. Se requiere una sesión local vigente. La publicación de referencias requiere conexión; los vídeos seleccionados y los proyectos locales se pueden consultar sin ella.
+Abrir el apartado y el editor una vez con conexión en Chrome, y descargar previamente la zona del mapa que se vaya a usar. En los instaladores el editor está incluido. Se requiere una sesión local vigente. La publicación de referencias requiere conexión; los vídeos importados y los proyectos locales se pueden consultar sin ella.
 
 ## Validación de entrega
 
@@ -41,4 +41,4 @@ Android conserva la firma privada de las versiones anteriores. Windows no tiene 
 
 Vehículos muestra una semana de clases y bloqueos por matrícula, incluidos los remolques. Administración y gerencia registran mantenimiento, avería, ITV u otra indisponibilidad, con final previsto o hasta nuevo aviso. Los profesores ven disponibilidad y sus propias clases, sin notas privadas de taller. El servidor rechaza reservas que coincidan con un bloqueo, incluidas propuestas enviadas tras trabajar offline. Los bloqueos se crean y modifican con conexión; se sincronizan en la copia local. Las clases anteriores se conservan con aviso para reorganizarlas. Retirar un bloqueo conserva el historial.
 
-El alojamiento externo de vídeos se está valorando; no se ha contratado ni activado ningún proveedor. El módulo actual publica referencias y reproduce originales locales.
+Se ha elegido distribuir vídeos por pendrive. No se contrata alojamiento externo. La biblioteca publica referencias y conserva copias locales cifradas tras la importación. Véase USB-VIDEOS.md para el procedimiento.
