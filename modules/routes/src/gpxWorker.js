@@ -1,0 +1,2 @@
+import {createGpxParser,MAX_GPX_BYTES} from './gpxParser.js';
+self.onmessage=async({data:file})=>{try{if(file.size>MAX_GPX_BYTES)throw Error('El GPX supera 256 MB.');const parser=createGpxParser(),decoder=new TextDecoder();for(let start=0;start<file.size;start+=1024*1024){const chunk=await file.slice(start,start+1024*1024).arrayBuffer();parser.write(decoder.decode(chunk,{stream:true}));}parser.write(decoder.decode());self.postMessage({result:parser.finish()});}catch(e){self.postMessage({error:e.message})}};

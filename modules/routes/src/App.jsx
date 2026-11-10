@@ -763,7 +763,7 @@ export default function App() {
   };
   const updateSources = useCallback((nextRoutes = routesRef.current, selected = activeRef.current, vehicle = null) => {
     const map = mapRef.current;
-    if (!map?.isStyleLoaded()) return;
+    if (!map) return;
     map.getSource('route-lines')?.setData(lineFeatureCollection(nextRoutes, selected));
     map.getSource('route-points')?.setData(pointFeatureCollection(nextRoutes, selected, vehicle));
   }, []);
@@ -1092,7 +1092,7 @@ export default function App() {
   }, [mapReady, mapProvider, activeConflictMarkers, selectedMarkerId, currentMarkerId]);
   useEffect(() => {
     const pointLayer = mapRef.current?.getLayer('route-points-layer');
-    if (pointLayer) mapRef.current.setLayoutProperty('route-points-layer', 'visibility', playing || recording ? 'none' : 'visible');
+    if (pointLayer) mapRef.current.setLayoutProperty('route-points-layer', 'visibility', recording ? 'none' : 'visible');
   }, [mapReady, playing, recording]);
   useEffect(() => {
     if (mapReady && mapRef.current) mapRef.current.getCanvas().style.cursor = mode === 'add' || placingMarker || false ? 'crosshair' : '';
@@ -1621,6 +1621,14 @@ export default function App() {
       setExportMessage('No se pudo iniciar la grabación MP4. Comprueba que Safari esté actualizado e inténtalo de nuevo.');
     }
   };
+  useEffect(() => {
+    const map=mapRef.current;if(!mapReady||!map||playing||recording)return;
+    const route=routesRef.current.find(r=>r.id===activeRef.current);
+    const position=route?.points.length?interpolateRoute(route.points,progressRef.current):null;
+    const vehicle=cameraView==='vehicle';
+    map.easeTo({...(position?{center:position.coords}:{}),pitch:vehicle?60:0,bearing:vehicle&&position?position.bearing:0,
+      zoom:vehicle?Math.max(18.8,Math.min(19.7,20.3-Math.log2(height/100))):Math.max(15.5,Math.min(19.2,18.2-Math.log2(height/100))),duration:300});
+  },[mapReady,cameraView,height]);
   const focusRoute = route => {
     if (!route?.points.length || !mapRef.current) return;
     const bounds = route.points.reduce((b, coord) => b.extend(coord), new LngLatBounds(route.points[0], route.points[0]));

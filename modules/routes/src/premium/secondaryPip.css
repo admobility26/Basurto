@@ -1,0 +1,12 @@
+.premium-workspace .secondary-pip{position:absolute;z-index:9;min-width:150px;max-width:48%;background:#111;border:2px solid white;border-radius:8px;box-sizing:border-box;box-shadow:0 4px 14px #0006}
+.premium-workspace .secondary-pip video{display:block;width:100%;aspect-ratio:16/9;object-fit:contain;background:#111}
+.secondary-pip-controls{position:absolute;bottom:100%;left:0;right:0;display:flex;align-items:center;justify-content:space-between;background:#172c25;color:white;padding:5px 8px;cursor:move;touch-action:none;font-size:12px;border-radius:6px 6px 0 0}
+.secondary-pip-controls button{padding:2px 8px;color:white;border:1px solid #78978c}
+.secondary-pip-settings{position:absolute;top:100%;left:0;right:0;background:#172c25;color:white;padding:8px;font-size:12px;border-radius:0 0 6px 6px;max-height:45vh;overflow:auto}
+.secondary-pip-settings summary{cursor:pointer}
+.secondary-pip-settings label,.secondary-pip-settings small{display:block;margin:7px 0}
+.secondary-pip-settings input{max-width:100%}
+.secondary-pip-settings button{padding:5px;margin:4px 0;background:#176253;color:white;border-radius:5px}
+.secondary-pip-empty{padding:28px 8px;color:white;font-size:12px}
+.secondary-pip-uncovered{position:absolute;inset:25% 0;color:white;text-align:center;font-size:12px}
+.premium-workspace .map-panel.movie-exporting .secondary-pip-controls{visibility:hidden}

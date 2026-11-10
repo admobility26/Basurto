@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import {realtimeMapFrame} from '../modules/routes/src/premium/realtimeMapFrame.js';
+import {timeline} from '../modules/routes/src/premium/reviewTime.js';
+const review={points:[{coordinates:[-2.9,43.2],segment:0,time:1000},{coordinates:[-2.8,43.3],segment:0,time:3000}]},clock=timeline(review.points);
+let view={center:[-2.91,43.19],zoom:16,pitch:55,bearing:73},render;
+const map={getCenter:()=>view.center,project:c=>({x:c[0]*1000,y:c[1]*1000}),getZoom:()=>view.zoom,getPitch:()=>view.pitch,getBearing:()=>view.bearing,stop(){},easeTo(next){view={...next};},once(event,cb){render=cb;},off(event,cb){if(render===cb)render=null;},triggerRepaint(){}};
+const frame=realtimeMapFrame(map,review,clock);
+let captured=false;
+const pending=frame(1).then(()=>{captured=true;});
+await Promise.resolve();assert(!captured,'Never capture the old WebGL frame');
+assert.equal(view.pitch,55);assert.equal(view.bearing,73);assert.equal(view.zoom,16);assert(Math.abs(view.offset[0]-10)<1e-8);assert(Math.abs(view.offset[1]-10)<1e-8);
+render();await pending;assert(captured);
+view={zoom:10,pitch:0,bearing:0};
+const next=frame(2);assert.equal(view.pitch,55);assert.equal(view.bearing,73);assert.equal(view.zoom,16);assert.deepEqual(view.center,review.points[1].coordinates);render();await next;
+const controller=new AbortController();const cancelled=frame(0,controller.signal);controller.abort();await assert.rejects(cancelled,{name:'AbortError'});assert.equal(render,null);
+console.log('PASS realtime export: selected pitch/bearing/zoom locked across frames, rendered-frame barrier and cancellation cleanup.');

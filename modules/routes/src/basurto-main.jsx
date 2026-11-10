@@ -9,7 +9,7 @@ import './styles.css';
 import './help.css';
 import './web-access.css';
 import './basurto.css';
-const GpxVideo=lazy(()=>import('./GpxVideo.jsx'));
+const GpxVideo=lazy(()=>import('./PremiumWorkspace.jsx'));
 const Editor=lazy(()=>import('./App.jsx'));
 const root=createRoot(document.getElementById('root'));
 let session,vault,closed=false;
@@ -27,6 +27,7 @@ async function start(){
  vault=secret?await window.RutasLocalVault.unlock(session.user,secret):await new Promise(resolve=>root.render(<Unlock user={session.user} onReady={resolve}/>));
  if(closed){await vault.lock();return}
  window.usbMedia=createUsbMedia(session,vault);
+ window.basurtoMovie=session.movie;
  window.installRutasAccount(session.user,vault);localStorage.setItem('basurto-routes-language',localStorage.getItem('basurto-routes-language')||'es');
  registerAutosave('basurto-encrypted',{finish:()=>vault.flush(),checkpoint:()=>vault.flush(),busy:()=>vault.pending});
  window.addEventListener('basurto-routes:vault-error',e=>reportAutosave('error',e.detail));

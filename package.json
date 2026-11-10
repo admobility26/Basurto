@@ -25,8 +25,10 @@
   },
   "dependencies": {
     "maplibre-gl": "6.13.0",
+    "mediabunny": "1.62.1",
     "pdfjs-dist": "6.5.438",
     "react": "19.1.0",
-    "react-dom": "19.1.0"
+    "react-dom": "19.1.0",
+    "sax": "1.4.1"
   }
 }

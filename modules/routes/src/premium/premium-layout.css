@@ -1,0 +1,23 @@
+/* Keep Premium's shared identity controls bounded; never affect Basic or the welcome screen. */
+.premium-workspace .home-logo{width:140px;height:44px;max-width:140px;flex:none;min-width:0}
+.premium-workspace .home-logo img{width:100%;height:100%;max-width:100%;max-height:44px;object-fit:contain}
+.premium-workspace .topbar{height:auto;min-height:72px;flex:0 0 auto;display:grid;grid-template-columns:minmax(260px,1fr) auto auto;align-items:center;gap:12px;padding:10px 16px}
+.premium-workspace .premium-identity{display:flex;align-items:center;gap:12px;min-width:0}
+.premium-workspace .premium-identity .brand{min-width:0}
+.premium-workspace .premium-identity .brand-name{font-size:13px;letter-spacing:.2px;white-space:nowrap}
+.premium-workspace .premium-identity .brand-subtitle{font-size:10px;max-width:230px}
+.premium-workspace .premium-navigation{display:flex;align-items:center;gap:8px;min-width:0}
+.premium-workspace .topbar .help-controls{display:flex;flex-wrap:nowrap;gap:6px}
+.premium-workspace .topbar .help-controls button,.premium-workspace .topbar .help-controls a,.premium-workspace .premium-basic-button{display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;min-height:36px;padding:8px 10px;border:1px solid #b3ccbd;border-radius:8px;background:#fff;color:#175740;font:600 12px/1.2 'DM Sans',sans-serif;text-decoration:none}
+.premium-workspace .topbar .topbar-right{min-width:0;display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}
+.premium-workspace .topbar .map-status{max-width:150px;line-height:1.4;letter-spacing:0}
+.premium-workspace .board-header{flex-wrap:wrap}
+.premium-workspace .board-header>.home-logo{width:120px;max-width:120px}
+.premium-workspace .board-header>div{min-width:0}
+.premium-workspace .board-header-actions{flex-wrap:wrap}
+@media(max-width:1550px){.premium-workspace .premium-identity .brand-subtitle{display:none}}
+@media(max-width:1300px){.premium-workspace .topbar{grid-template-columns:minmax(260px,1fr) auto;gap:8px 12px}.premium-workspace .topbar .topbar-right{grid-column:1/-1}.premium-workspace .topbar .map-status{max-width:none}}
+@media(max-width:750px){.premium-workspace .topbar{grid-template-columns:minmax(0,1fr);padding:8px 12px}.premium-workspace .premium-navigation{flex-wrap:wrap}.premium-workspace .topbar .topbar-right{grid-column:1;justify-content:flex-start}.premium-workspace .premium-identity .brand-name{font-size:12px}.premium-workspace .premium-identity{gap:8px}}
+
+/* The board is portalled outside the inert app root, but still needs Premium styling. */
+.premium-workspace.premium-portal{position:fixed;inset:0;z-index:15000;min-width:0}
