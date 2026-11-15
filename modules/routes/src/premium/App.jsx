@@ -704,7 +704,7 @@ export default function PremiumApp() {
     [libraryBusy, setLibraryBusy] = useState(false);
   const librarySaveTimer = useRef(null);
   const [gpxReview, setGpxReview] = useState(() => loadProjectGpxReview(currentProject));
-  const recoveryReviewId = recovered?.projectId === currentProject.id ? recovered.reviewId : gpxReview.autosaveReviewId;
+  const recoveryReviewId = (recovered?.projectId === currentProject.id ? recovered.reviewId : null) || gpxReview.autosaveReviewId;
   const restoringReview = useRef(!!recoveryReviewId);
   const [gpxProgress, setGpxProgress] = useState(0);
   const [gpxIncidentDraft, setGpxIncidentDraft] = useState(() => recovered?.projectId === currentProject.id ? recovered.gpxIncidentDraft || null : null);
@@ -1902,10 +1902,18 @@ export default function PremiumApp() {
       duration: 700
     });
   };
-  const switchProject = id => {
+  const switchProject = async id => {
     if (liveLesson) return;
     const project = projectState.projects.find(item => item.id === id);
     if (!project || project.id === currentProject.id) return;
+    let nextReview = loadProjectGpxReview(project);
+    if (nextReview.autosaveReviewId) {
+      try {
+        const saved = (await listLibraryReviews()).find(row => row.id === nextReview.autosaveReviewId);
+        if (!saved) throw Error('No se encuentra el GPX guardado. Abre la biblioteca para recuperarlo.');
+        nextReview = saved.review;
+      } catch (error) { reportAutosave('error', error.message); return; }
+    }
     const nextRoutes = loadProjectRoutes(project);
     const nextMarkers = loadProjectMarkers(project);
     if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
@@ -1915,8 +1923,8 @@ export default function PremiumApp() {
     }));
     setRoutes(nextRoutes);
     setConflictMarkers(nextMarkers);
-    setGpxReview(loadProjectGpxReview(project));
-    setWorkspaceMode('routes');
+    setGpxReview(nextReview);
+    setWorkspaceMode(nextReview.points.length ? 'gpx-review' : 'routes');
     setGpxProgress(0);
     gpxProgressRef.current = 0;
     setActiveId(nextRoutes[0].id);

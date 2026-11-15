@@ -40,9 +40,9 @@ export function drawMovie(ctx,video,incidents,second,composition){
 const movieAudio=new WeakMap();
 export function prepareMovieAudio(video,context){
  if(!video)throw Error('Abre el vídeo antes de exportar.');
- let route=movieAudio.get(video);if(!route){const audio=context||new (window.AudioContext||window.webkitAudioContext)();route={audio,source:audio.createMediaElementSource(video)};movieAudio.set(video,route);}return route.audio;
+ let route=movieAudio.get(video);if(!route){const audio=context||new (window.AudioContext||window.webkitAudioContext)();route={audio,owned:!context,source:audio.createMediaElementSource(video)};movieAudio.set(video,route);}return route.audio;
 }
-export async function releaseMovieVideo(video){const route=movieAudio.get(video);if(!route)return;route.source.disconnect();if(route.audio.state!=='closed')await route.audio.close();movieAudio.delete(video);}
+export async function releaseMovieVideo(video){const route=movieAudio.get(video);if(!route)return;route.source.disconnect();if(route.owned&&route.audio.state!=='closed')await route.audio.close();movieAudio.delete(video);}
 export function videoDecodeError(video){const code=video.error?.code,message=video.error?.message;return Error(code===2?'No se pudo leer el vídeo. Comprueba que su carpeta o disco sigue disponible.':`No se puede decodificar el vídeo${code?' (código '+code+')':''}.${message?' '+message:''}`);}
 function waitForVideo(video,event,signal){
  return new Promise((resolve,reject)=>{
@@ -80,7 +80,7 @@ export async function createFinalMovie({videoElement,url,incidents,onProgress,si
 }
 
 // One recorder and one output file across source changes; never concatenate MP4 blobs.
-export async function createSequenceMovie({videoElement:video,clips,incidents,composition,onProgress,signal,audioContext,sink,narration=false,isImagePaused=()=>false}){
+export async function createSequenceMovie({videoElement:video,clips,incidents,composition,onProgress,signal,audioContext,sink,narration=false,narrationStream,isImagePaused=()=>false}){
  const watermark=await loadVideoWatermark(),mime=['video/mp4;codecs="avc1.42E01E,mp4a.40.2"','video/mp4'].find(m=>globalThis.MediaRecorder?.isTypeSupported(m));
  if(!mime)throw Error('Este navegador no permite exportar MP4.');
  const original={src:video.src,muted:video.muted,rate:video.playbackRate};
@@ -97,7 +97,7 @@ export async function createSequenceMovie({videoElement:video,clips,incidents,co
  try{
   await ready(clips[0]);
   destination=audio.createMediaStreamDestination();source=movieAudio.get(video).source;source.connect(destination);video.muted=false;
-  if(narration){mic=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true},video:false});micSource=audio.createMediaStreamSource(mic);micSource.connect(destination);}
+  if(narration){mic=narrationStream||await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});const track=mic.getAudioTracks()[0];if(!track||track.readyState!=='live'||!track.enabled||track.muted)throw Error('El micrófono no está disponible para grabar.');micSource=audio.createMediaStreamSource(mic);micSource.connect(destination);await audio.resume();if(audio.state!=='running')throw Error('El audio está suspendido. Activa el micrófono y vuelve a exportar.');}
   stream=canvas.captureStream(30);destination.stream.getAudioTracks().forEach(t=>stream.addTrack(t));
   recorder=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:4000000});
   done=new Promise((resolve,reject)=>{recorder.onstop=async()=>{try{if(failed)throw failed;resolve(writer?await writer.close():new Blob(chunks,{type:recorder.mimeType}));}catch(e){reject(e);}};recorder.onerror=e=>{failed=e.error||Error('No se pudo generar el MP4.');stop();};});
@@ -111,7 +111,7 @@ export async function createSequenceMovie({videoElement:video,clips,incidents,co
     let settled=false;const finish=error=>{if(settled)return;settled=true;cancelAnimationFrame(frame);video.pause();video.removeEventListener('error',errorHandler);signal.removeEventListener('abort',cancel);error?reject(error):resolve();};
     const errorHandler=()=>finish(videoDecodeError(video)),cancel=()=>finish(new DOMException('Exportación cancelada.','AbortError'));
     video.addEventListener('error',errorHandler);signal.addEventListener('abort',cancel,{once:true});
-    const paint=async()=>{if(failed)return finish(failed);if(signal.aborted)return cancel();const second=clip.offset+Math.max(0,Math.min(clip.duration,video.currentTime-clip.startSecond));const sourceSecond=(clip.sourceOffset??clip.offset)+Math.max(0,Math.min(clip.duration,video.currentTime-clip.startSecond));onProgress(second/total,sourceSecond);try{await composition.prepareFrame?.(sourceSecond,signal);await composition.prepareVideoFrame?.(sourceSecond,signal);if(failed)return finish(failed);if(signal.aborted)return cancel();}catch(error){return finish(error);}drawMovie(ctx,video,incidents,sourceSecond,composition);drawVideoWatermark(ctx,watermark,canvas.width,canvas.height);
+    const paint=async()=>{if(narration&&mic?.getAudioTracks().some(t=>t.readyState!=='live'||!t.enabled||t.muted))return finish(Error('El micrófono se ha desconectado. Vuelve a exportar con el micrófono activo.'));if(failed)return finish(failed);if(signal.aborted)return cancel();const second=clip.offset+Math.max(0,Math.min(clip.duration,video.currentTime-clip.startSecond));const sourceSecond=(clip.sourceOffset??clip.offset)+Math.max(0,Math.min(clip.duration,video.currentTime-clip.startSecond));onProgress(second/total,sourceSecond);try{await composition.prepareFrame?.(sourceSecond,signal);await composition.prepareVideoFrame?.(sourceSecond,signal);if(failed)return finish(failed);if(signal.aborted)return cancel();}catch(error){return finish(error);}drawMovie(ctx,video,incidents,sourceSecond,composition);drawVideoWatermark(ctx,watermark,canvas.width,canvas.height);
      if(video.currentTime>=clip.endSecond-.02||video.ended)return finish();
      if(isImagePaused()){video.pause();}else if(video.paused)video.play().catch(finish);
      frame=requestAnimationFrame(paint);
@@ -120,5 +120,5 @@ export async function createSequenceMovie({videoElement:video,clips,incidents,co
   }
   stop();const blob=await done;if((blob.saved?blob.bytes:blob.size)<100)throw Error('El MP4 está vacío.');completed=true;return blob;
  }catch(e){failed=e;stop();if(done)await done.catch(()=>{});throw e;}
- finally{signal.removeEventListener('abort',abort);document.removeEventListener('visibilitychange',hidden);cancelAnimationFrame(frame);video.pause();stream?.getTracks().forEach(t=>t.stop());mic?.getTracks().forEach(t=>t.stop());micSource?.disconnect();if(source&&destination)source.disconnect(destination);await wake?.release();video.muted=original.muted;video.playbackRate=original.rate;if(original.src&&video.src!==original.src){video.src=original.src;video.load();}if(writer&&!completed)await writer.abort().catch(()=>{});}
+ finally{signal.removeEventListener('abort',abort);document.removeEventListener('visibilitychange',hidden);cancelAnimationFrame(frame);video.pause();stream?.getTracks().forEach(t=>t.stop());if(!narrationStream)mic?.getTracks().forEach(t=>t.stop());micSource?.disconnect();if(source&&destination)source.disconnect(destination);await wake?.release();video.muted=original.muted;video.playbackRate=original.rate;if(original.src&&video.src!==original.src){video.src=original.src;video.load();}if(writer&&!completed)await writer.abort().catch(()=>{});}
 }

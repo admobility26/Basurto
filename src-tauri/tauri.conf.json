@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Basurto",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "identifier": "com.admobility.basurto",
   "build": {
     "frontendDist": "../native-dist",
@@ -41,7 +41,8 @@
     },
     "macOS": {
       "signingIdentity": "-",
-      "minimumSystemVersion": "11.0"
+      "minimumSystemVersion": "11.0",
+      "entitlements": "Entitlements.plist"
     },
     "windows": {
       "nsis": {
