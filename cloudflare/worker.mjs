@@ -23,6 +23,7 @@ export class BasurtoOffice extends DurableObject {
    const user=store.authenticate(token);
    if(path==='/api/bootstrap')return json(store.bootstrap(user));
    if(path==='/api/training')return json(this.training.data(user));
+   if(path==='/api/training/course')return json(this.training.course(user,url.searchParams.get('version')));
    if(path==='/api/training/lesson')return json(this.training.lesson(user,url.searchParams.get('id')));
    if(path==='/api/training/presentation')return json(this.training.presentation(user,url.searchParams.get('id'),url.searchParams.get('signals')?.split(',')));
    if(path==='/api/training/file'){
@@ -40,7 +41,7 @@ export class BasurtoOffice extends DurableObject {
   if(request.headers.get('Origin')!==url.origin)throw new Problem('Origen no permitido',403);
   if(path==='/api/training/upload')return await this.upload(request,token);
   if(request.headers.get('Content-Type')?.split(';')[0]!=='application/json')throw new Problem('Formato inválido',415);
-  const bodyLimit=path==='/api/training/action'?240000:16000;
+  const bodyLimit=path==='/api/training/action'?1048576:16000;
   if(Number(request.headers.get('Content-Length'))>bodyLimit)throw new Problem('Solicitud demasiado grande',413);
   const reader=request.body?.getReader();if(!reader)throw new Problem('Solicitud inválida');let size=0,chunks=[];
   while(true){const {value,done}=await reader.read();if(done)break;size+=value.length;if(size>bodyLimit){await reader.cancel();throw new Problem('Solicitud demasiado grande',413)}chunks.push(value)}

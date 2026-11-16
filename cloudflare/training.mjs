@@ -2,6 +2,8 @@ import { Problem, digest } from './store.mjs';
 import seedSignals from './signals-seed.json' with { type: 'json' };
 export const TRAINING_SCHEMA=`
 CREATE TABLE IF NOT EXISTS training_local_materials(id TEXT PRIMARY KEY,title TEXT NOT NULL,filename TEXT NOT NULL,size INTEGER NOT NULL,fingerprint TEXT NOT NULL UNIQUE,published INTEGER NOT NULL DEFAULT 1,revision INTEGER NOT NULL DEFAULT 1,updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS training_courses(version_id TEXT PRIMARY KEY REFERENCES training_manual_versions(id),topics TEXT NOT NULL,published INTEGER NOT NULL DEFAULT 0,revision INTEGER NOT NULL DEFAULT 1,updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS training_course_progress(user_id TEXT NOT NULL,version_id TEXT NOT NULL,topic_id TEXT NOT NULL,favorite INTEGER NOT NULL DEFAULT 0,completed INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(user_id,version_id,topic_id));
 CREATE TABLE IF NOT EXISTS training_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS training_assets(id TEXT PRIMARY KEY,owner_id TEXT NOT NULL,kind TEXT NOT NULL,mime TEXT NOT NULL,size INTEGER NOT NULL,filename TEXT NOT NULL,object_key TEXT UNIQUE NOT NULL,created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS training_signals(id TEXT PRIMARY KEY,code TEXT UNIQUE NOT NULL,name TEXT NOT NULL,meaning TEXT NOT NULL,category TEXT NOT NULL,source TEXT NOT NULL DEFAULT '',image_id TEXT,builtin_image TEXT,owner_id TEXT,published INTEGER NOT NULL DEFAULT 0,archived INTEGER NOT NULL DEFAULT 0,revision INTEGER NOT NULL DEFAULT 1,updated_at TEXT NOT NULL);
@@ -34,6 +36,8 @@ export class Training {
   const lessons=this.s.all('SELECT id,owner_id,title,description,revision,updated_at FROM training_lessons WHERE archived=0'+(staff(user)?'':' AND owner_id=?')+' ORDER BY updated_at DESC',...(staff(user)?[]:[user.id]));
   return {local_materials:this.s.all('SELECT * FROM training_local_materials'+(staff(user)?'':' WHERE published=1')+' ORDER BY title'),routes_plan:staff(user)?'premium':'basic',signals:signals.map(s=>({...s,owner_id:staff(user)||s.owner_id===user.id?s.owner_id:null})),manuals,versions,lessons};
  }
+ course(user,versionId){const version=this.s.one('SELECT * FROM training_manual_versions WHERE id=?',versionId);if(!version)throw new Problem('Versión no disponible',404);const manual=this.manual(user,version.manual_id);const row=this.s.one('SELECT * FROM training_courses WHERE version_id=?',versionId);const visible=row&&(staff(user)||row.published);return {manual,version,course:visible?{...row,topics:JSON.parse(row.topics)}:null,progress:visible?this.s.all('SELECT topic_id,favorite,completed FROM training_course_progress WHERE user_id=? AND version_id=?',user.id,versionId):[]};}
+ topics(items,published){if(!Array.isArray(items)||!items.length||items.length>200)throw new Problem('El curso necesita entre 1 y 200 temas');const seen=new Set();const result=items.map(d=>{const topicId=req(d,'id',80);if(!/^[a-zA-Z0-9_-]+$/.test(topicId)||seen.has(topicId))throw new Problem('Identificador de tema inválido o repetido');seen.add(topicId);if(!Number.isInteger(d.page)||d.page<1||d.page>5000||!Number.isInteger(d.endPage)||d.endPage<d.page||d.endPage>5000)throw new Problem('Revisa las páginas del tema');if(!Array.isArray(d.keyPoints)||d.keyPoints.length>8||d.keyPoints.some(x=>typeof x!=='string'||x.length>600))throw new Problem('Revisa los puntos clave');const summary=optional(d,'summary',2500),keyPoints=d.keyPoints.map(x=>x.trim()).filter(Boolean);if(published&&(!summary||!keyPoints.length))throw new Problem('Completa el resumen y al menos un punto clave de cada tema antes de publicar');return {id:topicId,chapter:req(d,'chapter',160),title:req(d,'title',160),page:d.page,endPage:d.endPage,summary,keyPoints};});if(Buffer.byteLength(JSON.stringify(result))>750000)throw new Problem('El curso es demasiado grande');return result;}
  // Validate each reference in the user's scope and pin exact PDF versions.
  slides(user,items){if(!Array.isArray(items)||items.length<1||items.length>60)throw new Problem('Añade entre 1 y 60 pasos a la clase');return items.map(d=>{
   const kind=d.kind,title=optional(d,'title',160);
@@ -56,7 +60,18 @@ export class Training {
   const operation=req(data,'operation_id',100);const payload=digest(JSON.stringify(data));const prior=this.s.one('SELECT * FROM operations WHERE id=?',operation);
   if(prior){if(prior.user_id!==user.id||prior.payload!==payload)throw new Problem('Operación incompatible',409);return JSON.parse(prior.result)}
   let entity=data.id||id();const now=stamp();
-  if(data.action==='local_material'){
+  if(data.action==='course'){
+   if(!staff(user))throw new Problem('Solo administración y gerencia editan cursos',403);
+   const versionId=req(data,'version_id',100);this.course(user,versionId);entity=versionId;
+   const old=this.s.one('SELECT * FROM training_courses WHERE version_id=?',versionId);if(old)revision(old,data);else if(data.revision!==0)throw new Problem('El curso ha cambiado. Vuelve a abrirlo.',409);
+   const topics=this.topics(data.topics,!!data.published);
+   if(old)this.s.run('UPDATE training_courses SET topics=?,published=?,revision=revision+1,updated_at=? WHERE version_id=?',JSON.stringify(topics),data.published?1:0,now,versionId);
+   else this.s.run('INSERT INTO training_courses VALUES(?,?,?,?,?)',versionId,JSON.stringify(topics),data.published?1:0,1,now);
+  }else if(data.action==='course_progress'){
+   const versionId=req(data,'version_id',100),topicId=req(data,'topic_id',80),course=this.course(user,versionId).course;if(!course||!course.topics.some(t=>t.id===topicId))throw new Problem('Tema no disponible',404);
+   if(typeof data.favorite!=='boolean'||typeof data.completed!=='boolean')throw new Problem('Progreso inválido');entity=versionId;
+   this.s.run('INSERT INTO training_course_progress(user_id,version_id,topic_id,favorite,completed) VALUES(?,?,?,?,?) ON CONFLICT(user_id,version_id,topic_id) DO UPDATE SET favorite=excluded.favorite,completed=excluded.completed',user.id,versionId,topicId,data.favorite?1:0,data.completed?1:0);
+  }else if(data.action==='local_material'){
    if(!staff(user))throw new Problem('Solo oficina publica material compartido',403);
    const fingerprint=req(data,'fingerprint',64);if(!/^[a-f0-9]{64}$/.test(fingerprint)||!Number.isSafeInteger(data.size)||data.size<=0||data.size>50*1024**3)throw new Problem('Identificación de archivo inválida');
    const filename=req(data,'filename',240);if(/[\\/\x00-\x1f]/.test(filename)||! /\.(mp4|mov|webm)$/i.test(filename))throw new Problem('Nombre de vídeo inválido');
