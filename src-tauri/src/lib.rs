@@ -1,6 +1,7 @@
 mod vault;
 mod media;
 mod movie;
+mod course;
 use tauri::{Manager, State};
 use std::{sync::Mutex, time::Duration};
 use serde::{Deserialize, Serialize};
@@ -42,5 +43,5 @@ pub fn run(){tauri::Builder::default().setup(|app|{let dir=app.path().app_data_d
  app.manage(media::MediaState(Mutex::new(media::MediaStore::new(dir.join("media")))));
  app.manage(AppState{vault:Mutex::new(Vault::new(dir.join("basurto.vault"))),client:reqwest::Client::builder().redirect(reqwest::redirect::Policy::none()).timeout(Duration::from_secs(90)).build()?});Ok(())})
  .register_asynchronous_uri_scheme_protocol("basurto-media",|ctx,request,responder|{let app=ctx.app_handle().clone();std::thread::spawn(move||responder.respond(media::respond(&app,request)));})
- .invoke_handler(tauri::generate_handler![vault_status,vault_unlock,vault_read,vault_write,vault_lock,materials_key,api_request,media::media_request,movie::movie_request])
+ .invoke_handler(tauri::generate_handler![vault_status,vault_unlock,vault_read,vault_write,vault_lock,materials_key,api_request,media::media_request,movie::movie_request,course::course_request])
  .run(tauri::generate_context!()).expect("No se pudo iniciar Basurto");}
