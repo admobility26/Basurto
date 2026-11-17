@@ -2,6 +2,7 @@ import {normalizeTopics} from '../static/course-format.mjs';
 import { Problem, digest } from './store.mjs';
 import seedSignals from './signals-seed.json' with { type: 'json' };
 export const TRAINING_SCHEMA=`
+CREATE TABLE IF NOT EXISTS training_asset_deletions(object_key TEXT PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS training_local_materials(id TEXT PRIMARY KEY,title TEXT NOT NULL,filename TEXT NOT NULL,size INTEGER NOT NULL,fingerprint TEXT NOT NULL UNIQUE,published INTEGER NOT NULL DEFAULT 1,revision INTEGER NOT NULL DEFAULT 1,updated_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS training_course_notes(user_id TEXT,version_id TEXT,topic_id TEXT,note TEXT NOT NULL DEFAULT '',score INTEGER,PRIMARY KEY(user_id,version_id,topic_id));
 CREATE TABLE IF NOT EXISTS training_courses(version_id TEXT PRIMARY KEY REFERENCES training_manual_versions(id),topics TEXT NOT NULL,published INTEGER NOT NULL DEFAULT 0,revision INTEGER NOT NULL DEFAULT 1,updated_at TEXT NOT NULL);
@@ -103,15 +104,25 @@ export class Training {
    const old=data.id?this.manual(user,entity):null;if(old)revision(old,data);
    if(!old&&!data.asset_id)throw new Problem('Selecciona el PDF');
    if(data.asset_id)this.assetForWrite(user,data.asset_id,'pdf');
+   const imported=data.topics!==undefined?this.topics(data.topics,!!data.published):null;if(imported&&!data.asset_id)throw new Problem('El curso importado necesita su PDF');
    const values=[req(data,'title'),req(data,'category',100),optional(data,'description',2000),data.published?1:0,now];
    if(old)this.s.run('UPDATE training_manuals SET title=?,category=?,description=?,published=?,updated_at=?,revision=revision+1 WHERE id=?',...values,entity);
    else this.s.run('INSERT INTO training_manuals(title,category,description,published,updated_at,id) VALUES(?,?,?,?,?,?)',...values,entity);
-   if(data.asset_id){const n=this.s.one('SELECT COALESCE(MAX(number),0)+1 AS n FROM training_manual_versions WHERE manual_id=?',entity).n;this.s.run('INSERT INTO training_manual_versions VALUES(?,?,?,?,?)',id(),entity,n,data.asset_id,now)}
+   if(data.asset_id){const n=this.s.one('SELECT COALESCE(MAX(number),0)+1 AS n FROM training_manual_versions WHERE manual_id=?',entity).n;const versionId=id();this.s.run('INSERT INTO training_manual_versions VALUES(?,?,?,?,?)',versionId,entity,n,data.asset_id,now);if(imported)this.s.run('INSERT INTO training_courses VALUES(?,?,?,?,?)',versionId,JSON.stringify(imported),data.published?1:0,1,now)}
   }else if(data.action==='lesson'){
    const old=data.id?this.lesson(user,entity):null;if(old)revision(old,data);const slides=this.slides(user,data.slides);
    const values=[req(data,'title'),optional(data,'description',1000),JSON.stringify(slides),optional(data,'notes',4000),now];
    if(old)this.s.run('UPDATE training_lessons SET title=?,description=?,slides=?,notes=?,updated_at=?,revision=revision+1 WHERE id=?',...values,entity);
    else this.s.run('INSERT INTO training_lessons(title,description,slides,notes,updated_at,id,owner_id) VALUES(?,?,?,?,?,?,?)',...values,entity,user.id);
+  }else if(data.action==='delete_manual'){
+   if(!staff(user))throw new Problem('Solo administración y gerencia pueden eliminar cursos',403);
+   const row=this.manual(user,entity);revision(row,data);
+   const versions=this.s.all('SELECT id,asset_id FROM training_manual_versions WHERE manual_id=?',entity),ids=new Set(versions.map(v=>v.id));
+   // Keep unrelated lesson steps and private teacher notes; remove only deleted PDF references.
+   for(const lesson of this.s.all('SELECT id,slides FROM training_lessons')){const slides=JSON.parse(lesson.slides),remaining=slides.filter(s=>s.kind!=='pdf'||!ids.has(s.version_id));if(remaining.length!==slides.length)this.s.run('UPDATE training_lessons SET slides=?,archived=CASE WHEN ?=0 THEN 1 ELSE archived END,revision=revision+1,updated_at=? WHERE id=?',JSON.stringify(remaining),remaining.length,now,lesson.id)}
+   for(const v of versions){for(const table of ['training_course_notes','training_course_progress','training_courses'])this.s.run('DELETE FROM '+table+' WHERE version_id=?',v.id)}
+   this.s.run('DELETE FROM training_manual_versions WHERE manual_id=?',entity);this.s.run('DELETE FROM training_manuals WHERE id=?',entity);
+   for(const assetId of new Set(versions.map(v=>v.asset_id))){if(this.s.one('SELECT 1 FROM training_manual_versions WHERE asset_id=?',assetId)||this.s.one('SELECT 1 FROM training_signals WHERE image_id=?',assetId))continue;const a=this.s.one('SELECT object_key FROM training_assets WHERE id=?',assetId);if(a){this.s.run('INSERT OR IGNORE INTO training_asset_deletions VALUES(?)',a.object_key);this.s.run('DELETE FROM training_assets WHERE id=?',assetId)}}
   }else if(data.action==='archive'){
    const kind=data.kind;if(!['signal','manual','lesson'].includes(kind))throw new Problem('Tipo inválido');
    const row=this[kind](user,entity);revision(row,data);

@@ -61,10 +61,15 @@ export class BasurtoOffice extends DurableObject {
   const user=store.authenticate(token);
   if(!same(request.headers.get('X-CSRF-Token')||'',user.csrf))throw new Problem('Sesión no válida',403);
   if(path==='/api/logout'){store.logout(token);return json({ok:true},200,cookie('',request,true))}
-  if(path==='/api/training/action')return json(this.training.mutate(user,data));
+  if(path==='/api/training/action'){const result=this.training.mutate(user,data);await this.cleanupTrainingFiles();return json(result);}
   if(path==='/api/action')return json(store.mutate(user,data));
   throw new Problem('No encontrado',404);
  }catch(e){return json({error:e instanceof Problem?e.message:'No se pudo completar la operación. Inténtalo de nuevo.'},e instanceof Problem?e.status:500)}}
+ async cleanupTrainingFiles(){const rows=this.store.all('SELECT object_key FROM training_asset_deletions LIMIT 100');if(!rows.length)return;
+  await this.ctx.storage.setAlarm(Date.now()+60000);
+  for(const row of rows){try{await this.env.TRAINING_FILES.delete(row.object_key);this.store.run('DELETE FROM training_asset_deletions WHERE object_key=?',row.object_key)}catch{break}}
+ }
+ async alarm(){await this.cleanupTrainingFiles()}
  async upload(request,token){
   let user=this.store.authenticate(token);
   if(!same(request.headers.get('X-CSRF-Token')||'',user.csrf))throw new Problem('Sesión no válida',403);

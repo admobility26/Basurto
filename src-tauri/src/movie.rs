@@ -3,7 +3,7 @@ use tauri::{Manager,State};use serde_json::{Value,json};use base64::{Engine,engi
 struct Pending{owner:String,file:File,partial:PathBuf,final_path:PathBuf,index:u64}
 impl Drop for Pending{fn drop(&mut self){let _=std::fs::remove_file(&self.partial);}}
 #[derive(Default)]pub struct MovieState(Mutex<HashMap<String,Pending>>);
-fn authorized(user:&Value,owner:&str,unlocked:bool,now:u64)->bool{unlocked&&user["id"].as_str()==Some(owner)&&user["expires"].as_u64().unwrap_or(0)>now&&matches!(user["role"].as_str(),Some("admin"|"manager"))}
+fn authorized(user:&Value,owner:&str,unlocked:bool,now:u64)->bool{unlocked&&user["id"].as_str()==Some(owner)&&user["expires"].as_f64().filter(|v|v.is_finite()).unwrap_or(0.0)>now as f64&&matches!(user["role"].as_str(),Some("admin"|"manager"))}
 #[tauri::command]pub fn movie_request(app:tauri::AppHandle,input:Value,state:State<crate::AppState>,movies:State<MovieState>)->Result<Value,String>{
  let v=state.vault.lock().map_err(|_|"Error local")?;let user=v.contents.record.as_ref().and_then(|r|r.pointer("/state/user")).ok_or("Identifícate en Basurto")?;
  let owner=input["owner"].as_str().ok_or("Cuenta no válida")?;let now=std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(|_|"Reloj inválido")?.as_secs();
@@ -26,5 +26,5 @@ fn authorized(user:&Value,owner:&str,unlocked:bool,now:u64)->bool{unlocked&&user
 }
 
 #[cfg(test)]mod tests{use super::*;
-#[test]fn only_current_unlocked_office_account_can_export(){let mut user=json!({"id":"office","role":"admin","expires":200});assert!(authorized(&user,"office",true,100));assert!(!authorized(&user,"other",true,100));assert!(!authorized(&user,"office",false,100));assert!(!authorized(&user,"office",true,200));user["role"]=json!("teacher");assert!(!authorized(&user,"office",true,100));user["role"]=json!("manager");assert!(authorized(&user,"office",true,100));assert!(!authorized(&json!({}),"office",true,100));}
+#[test]fn only_current_unlocked_office_account_can_export(){let mut user=json!({"id":"office","role":"admin","expires":200.75});assert!(authorized(&user,"office",true,100));assert!(!authorized(&user,"other",true,100));assert!(!authorized(&user,"office",false,100));assert!(!authorized(&user,"office",true,201));user["role"]=json!("teacher");assert!(!authorized(&user,"office",true,100));user["role"]=json!("manager");assert!(authorized(&user,"office",true,100));assert!(!authorized(&json!({}),"office",true,100));}
 }
