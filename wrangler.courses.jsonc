@@ -1,0 +1,1 @@
+{"name":"basurto-cursos","main":"cloudflare/course-viewer.mjs","account_id":"a42daa5d5844f10ca43694aaba7ff82b","compatibility_date":"2026-11-06","workers_dev":true,"preview_urls":false,"observability":{"enabled":false},"r2_buckets":[{"binding":"TRAINING_FILES","bucket_name":"basurto"}],"triggers":{"crons":["17 * * * *"]}}

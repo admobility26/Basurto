@@ -24,6 +24,7 @@
     "wrangler": "4.158.0"
   },
   "dependencies": {
+    "fflate": "0.8.2",
     "maplibre-gl": "6.13.0",
     "mediabunny": "1.62.1",
     "pdfjs-dist": "6.5.438",

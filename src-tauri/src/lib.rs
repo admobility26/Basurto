@@ -1,4 +1,5 @@
 mod vault;
+use tauri_plugin_opener::OpenerExt;
 mod media;
 mod movie;
 mod course;
@@ -24,7 +25,7 @@ struct AppState{vault:Mutex<Vault>,client:reqwest::Client}
 #[derive(Serialize)]struct ApiOutput{status:u16,body:String,headers:std::collections::HashMap<String,String>}
 #[tauri::command]async fn api_request(input:ApiInput,state:State<'_,AppState>)->Result<ApiOutput,String>{
  let path=input.path.split('?').next().unwrap_or("");
- if !["/api/config","/api/login","/api/logout","/api/setup","/api/recover","/api/bootstrap","/api/action","/api/incidents","/api/training","/api/training/lesson","/api/training/course","/api/training/presentation","/api/training/file","/api/training/action","/api/training/upload"].contains(&path)||input.path.contains('#')||!matches!(input.method.as_str(),"GET"|"POST"){return Err("Solicitud no permitida".into())}
+ if !["/api/config","/api/login","/api/logout","/api/setup","/api/recover","/api/bootstrap","/api/action","/api/incidents","/api/training","/api/training/lesson","/api/training/course","/api/training/presentation","/api/training/file","/api/training/action","/api/training/upload","/api/training/package-file"].contains(&path)||input.path.contains('#')||!matches!(input.method.as_str(),"GET"|"POST"){return Err("Solicitud no permitida".into())}
  let cookie={let v=state.vault.lock().map_err(|_|"Error local")?;if !v.unlocked(){return Err("Caja local bloqueada".into())}v.contents.cookie.clone()};
  let mut request=state.client.request(reqwest::Method::from_bytes(input.method.as_bytes()).map_err(|_|"Método inválido")?,format!("{SERVER}{}",input.path)).header("Origin",SERVER);
  if !cookie.is_empty(){request=request.header("Cookie",cookie)}
@@ -36,12 +37,13 @@ struct AppState{vault:Mutex<Vault>,client:reqwest::Client}
  if let Some(cookie)=cookie{let mut v=state.vault.lock().map_err(|_|"Error local")?;if !v.unlocked(){return Err("Caja local bloqueada".into())}v.contents.cookie=if cookie=="basurto="{String::new()}else{cookie};v.save()?;}
  Ok(ApiOutput{status,body:STANDARD.encode(bytes),headers})
 }
+#[tauri::command]fn open_course_url(url:String,app:tauri::AppHandle,state:State<AppState>)->Result<(),String>{let parsed=reqwest::Url::parse(&url).map_err(|_|"Enlace inválido")?;if parsed.origin().ascii_serialization()!="https://basurto-cursos.admobility26.workers.dev"||!parsed.path().starts_with("/c/"){return Err("Destino no permitido".into())}let v=state.vault.lock().map_err(|_|"Error local")?;if !v.unlocked(){return Err("Desbloquea Basurto".into())}drop(v);app.opener().open_url(url,None::<&str>).map_err(|_|"No se pudo abrir el navegador".into())}
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run(){tauri::Builder::default().setup(|app|{let dir=app.path().app_data_dir()?;std::fs::create_dir_all(&dir)?;
+pub fn run(){tauri::Builder::default().plugin(tauri_plugin_opener::init()).setup(|app|{let dir=app.path().app_data_dir()?;std::fs::create_dir_all(&dir)?;
  #[cfg(unix)]{use std::os::unix::fs::PermissionsExt;std::fs::set_permissions(&dir,std::fs::Permissions::from_mode(0o700))?;}
  app.manage(movie::MovieState::default());
  app.manage(media::MediaState(Mutex::new(media::MediaStore::new(dir.join("media")))));
  app.manage(AppState{vault:Mutex::new(Vault::new(dir.join("basurto.vault"))),client:reqwest::Client::builder().redirect(reqwest::redirect::Policy::none()).timeout(Duration::from_secs(90)).build()?});Ok(())})
  .register_asynchronous_uri_scheme_protocol("basurto-media",|ctx,request,responder|{let app=ctx.app_handle().clone();std::thread::spawn(move||responder.respond(media::respond(&app,request)));})
- .invoke_handler(tauri::generate_handler![vault_status,vault_unlock,vault_read,vault_write,vault_lock,materials_key,api_request,media::media_request,movie::movie_request,course::course_request])
+ .invoke_handler(tauri::generate_handler![open_course_url,vault_status,vault_unlock,vault_read,vault_write,vault_lock,materials_key,api_request,media::media_request,movie::movie_request,course::course_request])
  .run(tauri::generate_context!()).expect("No se pudo iniciar Basurto");}

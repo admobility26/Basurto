@@ -1,3 +1,4 @@
+import {Packages} from './packages.mjs';
 import { DurableObject } from 'cloudflare:workers';
 import { Store, Problem, same } from './store.mjs';
 import { SCHEMA } from './schema.mjs';
@@ -13,7 +14,7 @@ export class BasurtoOffice extends DurableObject {
  constructor(ctx,env){super(ctx,env);this.ctx=ctx;this.env=env;const sql=ctx.storage.sql;
   ctx.storage.transactionSync(()=>{sql.exec(SCHEMA);sql.exec('CREATE TABLE IF NOT EXISTS request_limits(key TEXT PRIMARY KEY, count INTEGER NOT NULL, until REAL NOT NULL)')});
   this.store=new Store({all:(q,...p)=>sql.exec(q,...p).toArray(),run:(q,...p)=>{sql.exec(q,...p).toArray()},tx:fn=>ctx.storage.transactionSync(fn)},env);
-  this.training=new Training(this.store);this.training.initialize();
+  this.training=new Training(this.store);this.training.initialize();this.packages=new Packages(this.store,env,ctx);
  }
  async fetch(request){try{
   const url=new URL(request.url),path=url.pathname,store=this.store;
@@ -22,7 +23,7 @@ export class BasurtoOffice extends DurableObject {
   if(request.method==='GET'){
    const user=store.authenticate(token);
    if(path==='/api/bootstrap')return json(store.bootstrap(user));
-   if(path==='/api/training')return json(this.training.data(user));
+   if(path==='/api/training')return json({...this.training.data(user),packages:this.packages.list(user)});
    if(path==='/api/training/course')return json(this.training.course(user,url.searchParams.get('version')));
    if(path==='/api/training/lesson')return json(this.training.lesson(user,url.searchParams.get('id')));
    if(path==='/api/training/presentation')return json(this.training.presentation(user,url.searchParams.get('id'),url.searchParams.get('signals')?.split(',')));
@@ -39,6 +40,7 @@ export class BasurtoOffice extends DurableObject {
   }
   if(request.method!=='POST')throw new Problem('Método no permitido',405);
   if(request.headers.get('Origin')!==url.origin)throw new Problem('Origen no permitido',403);
+  if(path==='/api/training/package-file'){const user=store.authenticate(token);if(!same(request.headers.get('X-CSRF-Token')||'',user.csrf))throw new Problem('Sesión no válida',403);return json(await this.packages.upload(user,request,url));}
   if(path==='/api/training/upload')return await this.upload(request,token);
   if(request.headers.get('Content-Type')?.split(';')[0]!=='application/json')throw new Problem('Formato inválido',415);
   const bodyLimit=path==='/api/training/action'?1048576:16000;
@@ -61,7 +63,7 @@ export class BasurtoOffice extends DurableObject {
   const user=store.authenticate(token);
   if(!same(request.headers.get('X-CSRF-Token')||'',user.csrf))throw new Problem('Sesión no válida',403);
   if(path==='/api/logout'){store.logout(token);return json({ok:true},200,cookie('',request,true))}
-  if(path==='/api/training/action'){const result=this.training.mutate(user,data);await this.cleanupTrainingFiles();return json(result);}
+  if(path==='/api/training/action'){const result=typeof data.action==='string'&&data.action.startsWith('package_')?await this.ctx.blockConcurrencyWhile(()=>this.packages.action(user,data)):this.training.mutate(user,data);await this.cleanupTrainingFiles();return json(result);}
   if(path==='/api/action')return json(store.mutate(user,data));
   throw new Problem('No encontrado',404);
  }catch(e){return json({error:e instanceof Problem?e.message:'No se pudo completar la operación. Inténtalo de nuevo.'},e instanceof Problem?e.status:500)}}
