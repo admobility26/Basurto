@@ -9,6 +9,13 @@ export class Packages{
  async action(user,data){
   if(data.action==='package_begin'){if(!office(user))throw new Problem('Solo administración y gerencia suben cursos',403);if(typeof data.title!=='string'||!data.title.trim()||data.title.length>160)throw new Problem('Escribe un título');let manifest;try{manifest=validateManifest(data.files)}catch(e){throw new Problem(e.message)}if(this.s.one("SELECT COUNT(*) n FROM course_packages WHERE status='uploading' AND owner_id=?",user.id).n>=5)throw new Problem('Elimina alguna importación incompleta antes de continuar');const id=crypto.randomUUID();this.s.run('INSERT INTO course_packages VALUES(?,?,?,?,?,?,?)',id,data.title.trim(),user.id,'uploading',JSON.stringify(manifest.files),manifest.size,new Date().toISOString());return {id}}
   const row=this.get(user,data.id,data.action!=='package_open');
+  if(data.action==='package_rename'){
+   if(typeof data.title!=='string'||!data.title.trim()||data.title.length>160)throw new Problem('Escribe un nombre de hasta 160 caracteres');
+   if(data.previous_title!==row.title)throw new Problem('El nombre ha cambiado desde que abriste el editor. Actualiza la biblioteca.',409);
+   const title=data.title.trim();
+   this.s.tx(()=>{this.s.run('UPDATE course_packages SET title=? WHERE id=?',title,row.id);this.s.run('INSERT INTO audit(actor,action,entity,at) VALUES(?,?,?,?)',user.id,'package_rename',row.id,new Date().toISOString())});
+   return {id:row.id,title};
+  }
   if(data.action==='package_finish'){if(row.status==='ready')return {id:row.id};if(row.status!=='uploading')throw new Problem('Espera a que termine la operación actual',409);const files=JSON.parse(row.manifest);if(this.s.one('SELECT COUNT(*) n FROM course_package_files WHERE package_id=?',row.id).n!==files.length)throw new Problem('Faltan archivos por subir',409);await this.env.TRAINING_FILES.put('courses/manifests/'+row.id,JSON.stringify({id:row.id,title:row.title,files}));this.s.run("UPDATE course_packages SET status='ready' WHERE id=?",row.id);return {id:row.id}}
   if(data.action==='package_delete'){
    if(!['ready','uploading'].includes(row.status))throw new Problem('Espera a que termine la operación actual',409);
