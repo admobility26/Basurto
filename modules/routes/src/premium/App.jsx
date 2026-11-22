@@ -3034,7 +3034,11 @@ export default function PremiumApp() {
             map.once("idle", finish);
           });
           return {
-            prepareFrame,
+            prepareFrame: async (second, signal) => {
+              const position = pointAt(gpxReview.points, second / reviewClock.duration, reviewClock);
+              map.getSource('gpx-vehicle')?.setData(gpxVehicleFeature(gpxReview, position.gap ? null : position.point?.coordinates));
+              await prepareFrame(second, signal);
+            },
             project: coords => map.project(coords),
             freezeMap: async () => {
               await new Promise((resolve, reject) => {
