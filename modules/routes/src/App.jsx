@@ -20,10 +20,10 @@ import { recordingContextOptions, drawExplanationPointer } from './mapRecording.
 import BackupScreen from './BackupScreen.jsx';
 import RouteLibrary from './RouteLibrary.jsx';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { addProtocol, Map as MapLibreMap, NavigationControl, AttributionControl, LngLatBounds, setWorkerUrl } from 'maplibre-gl';
-import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
+import { addProtocol, Map as MapLibreMap, NavigationControl, AttributionControl, LngLatBounds } from 'maplibre-gl';
+import './mapWorker.js';
 import { Marker as MapLibreMarker } from 'maplibre-gl';
-setWorkerUrl(maplibreWorkerUrl);
+
 addProtocol('basurto-map',async(params,controller)=>{const r=await fetch(params.url.replace('basurto-map://','https://'),{signal:controller.signal});if(!r.ok)throw Error('Mapa no disponible');return {data:await r.arrayBuffer()}});
 const COLORS = ['#e36b4d', '#477bda', '#35a17e', '#a271c5', '#d2a33c', '#e64980', '#0ea5a4', '#7c8c26', '#6b7280', '#f97316'];
 const SPEEDS = [0.1, 0.2, 0.3, 0.4, 0.5, 1, 2];

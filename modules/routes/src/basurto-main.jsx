@@ -1,3 +1,4 @@
+import {withMapCache} from './mapFetch.js';
 import BasurtoNavigation from './BasurtoNavigation.jsx';
 import React,{useState,useEffect,Suspense,lazy} from 'react';
 import {createRoot} from 'react-dom/client';
@@ -36,7 +37,7 @@ async function start(){
  window.addEventListener('beforeunload',e=>{checkpointAutosave();if(hasActiveWork()||vault.pending){e.preventDefault();e.returnValue=''}});
  for(const type of ['pointerdown','keydown','touchstart'])window.addEventListener(type,()=>session.activity(),{passive:true});
  // MapLibre requests consult the explicit local cache in both browser and native WebViews.
- const nativeFetch=window.fetch.bind(window);window.fetch=async(resource,options)=>{const url=new URL(typeof resource==='string'?resource:resource.url,location.href);if(['www.geo.euskadi.eus','www.ign.es'].includes(url.hostname)&&url.protocol==='https:'&&(!options?.method||options.method==='GET')){const cache=await caches.open(url.hostname==='www.ign.es'?'ortofoto-pnoa-v1':'ortofoto-euskadi-v1');const saved=await cache.match(resource);if(saved)return saved}return nativeFetch(resource,options)};
+ window.fetch=withMapCache(window.fetch.bind(window),window.caches,session.mapTile);
  root.render(<Workspace/>);
 }
 start().catch(e=>root.render(<div className="basurto-unlock"><h1>No se ha podido abrir Formación</h1><p role="alert">{e.message}</p><p>Vuelve a la agenda y abre Recorridos de nuevo.</p></div>));

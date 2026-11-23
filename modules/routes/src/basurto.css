@@ -20,3 +20,11 @@ html,body,#root{height:100%;min-height:0;margin:0}body{overflow:hidden}#root{dis
 #root .topbar .premium-navigation button{color:#202323;border-color:#d5d6d3}
 #root .review-clock button,#root .review-transport button,#root .racebox-panel .lesson-mark,#root .export-button,#root .library-launch{background:#ffd100;color:#202323;border-color:#d6b000}
 #root .folder-workspace,#root .review-assembly{background:#f6f6f3;border-color:#d5d6d3}
+#root .movie-toolbar{background:#202323f5;color:white}
+#root .movie-toolbar button,#root .movie-toolbar a,#root .gpx-clip-open{background:#ffd100;color:#202323;border-color:#d6b000}
+#root .movie-toolbar select{background:white;color:#202323;max-width:100%}
+#root .pip-size-toggle{background:#202323;color:white}
+#root .basurto-video-brand{display:none}
+#root .movie-preview .basurto-video-brand{display:block}
+#root .review-pip>button{background:#ffd100;color:#202323;padding:8px;border-radius:8px}
+#root .pip-size-toggle button{color:#202323;background:#fff8ce}

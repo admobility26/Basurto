@@ -12,10 +12,14 @@ Bloquear se ofrece en la cabecera de Recorridos. El botón flotante nativo no ap
 
 En escritorio la lectura para decodificación usa `CustomSource` y el puente de medios autenticado. La URL `basurto-media` sirve para reproducir en el elemento vídeo, pero no estaba permitida en `connect-src` para las peticiones del decodificador. No se amplía la política de red: cada lectura comprueba cuenta, sesión, token, rango y tamaño máximo de 1 MiB en Rust. El archivo permanece cifrado en disco. El navegador conserva su fuente local existente.
 
+El worker de MapLibre se crea desde el código empaquetado mediante una URL Blob: WKWebView no necesita importar módulos desde el esquema interno de Tauri. La caché de mapas es opcional para la conexión: si CacheStorage falta o rechaza el origen nativo, la petición continúa por red.
+
+La descarga nativa de teselas sigue el adaptador de escritorio de Elorrieta: `map_tile` permite exclusivamente HTTPS de geoEuskadi, PNOA y OpenStreetMap, rechaza redirecciones y respuestas no gráficas, y limita cada imagen a 5 MiB. Los permisos de cuenta se comprueban en el anfitrión; el comando requiere dispositivo desbloqueado. No se relaja CSP ni se desactiva la validación TLS.
+
 ## Validación
 
-- 66 pruebas JavaScript y prueba del adaptador nativo correctas.
-- 6 pruebas Rust, incluyendo lectura por token, límites, otra cuenta y token cerrado.
+- 68 pruebas JavaScript y prueba del adaptador nativo correctas.
+- 7 pruebas Rust, incluyendo lectura por token, límites, otra cuenta y token cerrado.
 - Inspección visual del GPX integrado y navegación de regreso en entorno local con cuenta ficticia.
 - Lectura de duración de MP4 con CustomSource y URL deliberadamente no descargable: correcta.
 - Pendiente: exportación completa en la aplicación instalada de Mac con el recorrido del usuario. No considerar la prueba de lectura equivalente a esa validación.

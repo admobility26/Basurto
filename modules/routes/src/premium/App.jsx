@@ -32,15 +32,15 @@ import ReviewStudio from './ReviewStudio.jsx';
 import { pointAt, pointFraction, timeline } from './reviewTime.js';
 import {convert as lessonReview} from './lessonReview.js';
 import React, { useCallback, useEffect, useMemo, useRef, useState, useLayoutEffect } from 'react';
-import { addProtocol, Map as MapLibreMap, NavigationControl, AttributionControl, LngLatBounds, setWorkerUrl } from 'maplibre-gl';
+import { addProtocol, Map as MapLibreMap, NavigationControl, AttributionControl, LngLatBounds } from 'maplibre-gl';
 const mapboxgl = {};
 const MapboxGLMap = MapLibreMap,
   MapboxMarker = MapLibreMarker,
   MapboxNavigationControl = NavigationControl,
   MapboxAttributionControl = AttributionControl;
-import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
+import '../mapWorker.js';
 import { Marker as MapLibreMarker } from 'maplibre-gl';
-setWorkerUrl(maplibreWorkerUrl);
+
 addProtocol('basurto-map', async (params, controller) => {
   const r = await fetch(params.url.replace('basurto-map://', 'https://'), {
     signal: controller.signal
