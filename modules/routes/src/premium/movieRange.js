@@ -9,7 +9,7 @@ export function trimMovieClip(clip,videoDuration,offset=0){
 }
 export function trimMovieClips(clips,durations){let offset=0;return clips.map((clip,i)=>{const cropped=trimMovieClip(clip,durations[i],offset);offset+=cropped.duration;return cropped;});}
 export async function movieSourceDuration(source){
- const {Input,BlobSource,UrlSource,ALL_FORMATS}=await import('mediabunny');
- const input=new Input({source:source.blob?new BlobSource(source.blob):new UrlSource(source.url),formats:ALL_FORMATS});
+ const {Input,BlobSource,UrlSource,CustomSource,ALL_FORMATS}=await import('mediabunny');
+ const input=new Input({source:source.source?new CustomSource(source.source):source.blob?new BlobSource(source.blob):new UrlSource(source.url),formats:ALL_FORMATS});
  try{const track=await input.getPrimaryVideoTrack();if(!track)throw Error('El archivo no contiene una pista de vídeo.');return await track.computeDuration();}finally{input.dispose();}
 }

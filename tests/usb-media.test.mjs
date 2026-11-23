@@ -13,3 +13,17 @@ test('encrypted USB import survives reopen, decrypts only ranges, isolates accou
  await v.lock();await assert.rejects(()=>v.readVideoRange('usb-sample',0,1));const reopened=await ctx.RutasLocalVault.unlock({id:'one'},'Fictitious-local-key-123');assert.deepEqual(new Uint8Array(await reopened.readVideoRange('usb-sample',0,100)),bytes.slice(0,101));await reopened.lock();await assert.rejects(()=>ctx.RutasLocalVault.unlock({id:'one'},'Wrong-local-password-123'));const other=await ctx.RutasLocalVault.unlock({id:'two'},'Other-local-password-456');assert.equal(await other.get('videos','usb-sample'),undefined);await other.lock();
 });
 test('native playback and browser playback do not use whole-file decryption',async()=>{const adapter=await readFile('modules/routes/src/usbMedia.js','utf8');assert(!adapter.includes('.loadVideo('));assert(adapter.includes('readVideoRange'));const native=await readFile('src-tauri/src/media.rs','utf8');assert(native.includes('end.min(start+CHUNK-1)'));assert(native.includes('account(&v,owner)'));const sw=await readFile('modules/routes/public/media-sw.js','utf8');assert(sw.includes('e.clientId!==clientId'));assert(sw.includes("'Cache-Control':'no-store'"))});
+
+test('native export reads bounded authenticated chunks without fetching a media URL',async()=>{
+ const {createUsbMedia}=await import('../modules/routes/src/usbMedia.js');
+ const oldWindow=globalThis.window;globalThis.window=new EventTarget();
+ const bytes=Uint8Array.from({length:2*VIDEO_CHUNK+13},(_,i)=>i%251);let opened=false,reads=0;
+ const adapter=createUsbMedia({activity(){},mediaUrl:()=> 'basurto-media://localhost/test',async media(input){
+  if(input.action==='info')return {size:bytes.length};
+  if(input.action==='open'){opened=true;return 'test';}
+  if(input.action==='close'){opened=false;return true;}
+  assert.equal(input.action,'read');assert(opened);assert.equal(input.token,'test');assert(input.end-input.start<=VIDEO_CHUNK);reads++;
+  return Buffer.from(bytes.slice(input.start,input.end)).toString('base64');
+ }},null);
+ try{const player=await adapter.open('sample');assert.equal(await player.source.getSize(),bytes.length);assert.deepEqual(await player.source.read(3,bytes.length),bytes.slice(3));assert.equal(reads,3);await player.close();await assert.rejects(()=>player.source.read(0,10));}finally{await adapter.close();globalThis.window=oldWindow;}
+});

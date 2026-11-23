@@ -47,5 +47,5 @@ window.Formation=(()=>{
   $('#theoryForm').onsubmit=e=>{e.preventDefault();if(editing>=0){error('Guarda el paso que estás editando antes de guardar la clase.');return}submit(e.target,async()=>{const f=new FormData(e.target);return {action:'lesson',...(l?{id:l.id,revision:l.revision}:{}),title:f.get('title'),description:f.get('description'),notes:f.get('notes'),slides}})};if(l)$('#archiveTheory').onclick=()=>archive('lesson',l);
  }
  window.addEventListener('beforeunload',e=>{if(dirty||localBusy){e.preventDefault();e.returnValue=''}});
- return {mount,reset,isBusy:()=>localBusy};
+ return {mount,reset,showLibrary:()=>{section='manuals';draw()},isBusy:()=>localBusy};
 })();

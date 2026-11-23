@@ -1,3 +1,4 @@
+import BasurtoNavigation from '../BasurtoNavigation.jsx';
 import { parseGpxFile } from '../gpxImport.js';
 import { realtimeMapFrame } from './realtimeMapFrame.js';
 import PlaceSearch from '../PlaceSearch.jsx';
@@ -2758,7 +2759,7 @@ export default function PremiumApp() {
       setBoardOpen(false);
       setBoardSeed(null);
     }} />}
-    <LegacyImport /><header className="topbar"><div className="premium-identity"><HomeLogo language={language} /><div className="brand"><div><div className="brand-name">Basurto <span>Premium</span></div><div className="brand-subtitle">Recorridos reales · GPX y vídeo</div></div></div></div><div className="premium-navigation"><button className="premium-basic-button" type="button" onClick={() => window.dispatchEvent(new Event('basurto-routes:home'))}>← {t('Oinarrizkoa', 'Básica')}</button><HelpControls language={language} /></div>
+    <LegacyImport /><header className="topbar"><BasurtoNavigation section="gpx"/><div className="premium-navigation"><HelpControls language={language} /></div>
       <div className="topbar-right"><AutosaveStatus language={language} /><AccountControls language={language} disabled={recording || liveLesson} /><button className="library-launch" disabled={recording || liveLesson} onClick={showLibrary}>▤ {t("Liburutegia", "Biblioteca")}</button><span className="map-status"><i className={mapReady && !mapError ? 'status-dot ready' : 'status-dot'} />{mapProvider === 'mapbox' ? 'Mapbox Satélite' : rasterLabel(mapProvider)}</span><button className="icon-button" title="Centrar en Bizkaia" onClick={() => mapRef.current?.flyTo({
           center: START,
           zoom: 10.1,

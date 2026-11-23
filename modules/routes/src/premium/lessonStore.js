@@ -15,7 +15,7 @@ export async function saveVideo(id,file){
 }
 export async function loadVideo(id){
  const ref=await vault().get('premium-media',id);if(!ref)return null;
- const player=await window.usbMedia.open(ref.fingerprint);openPlayers.add(player);return {url:player.url,close:async()=>{openPlayers.delete(player);await player.close()}};
+ const player=await window.usbMedia.open(ref.fingerprint);openPlayers.add(player);return {url:player.url,source:player.source,close:async()=>{openPlayers.delete(player);await player.close()}};
 }
 export async function deleteVideo(id){await vault().batch([{type:'delete',namespace:'premium-media',id}]);changed();}
 export async function closeVideoPlayers(){for(const player of openPlayers)await player.close().catch(()=>{});openPlayers.clear();}

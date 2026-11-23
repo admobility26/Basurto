@@ -1,3 +1,4 @@
+import BasurtoNavigation from './BasurtoNavigation.jsx';
 import PlaceSearch from './PlaceSearch.jsx';
 import PremiumTools from './PremiumTools.jsx';
 import {loadVideoWatermark,drawVideoWatermark} from './videoWatermark.js';
@@ -1975,7 +1976,7 @@ export default function App() {
       setBoardSeed(null);
     }} />}
     <LegacyImport /><header className="topbar">
-      <div className="brand"><HomeLogo className="institution-logo" language={language}/><div><div className="brand-name">Basurto Recorridos</div><div className="brand-subtitle">Trayectorias y pizarra didáctica</div></div></div>
+      <BasurtoNavigation section="editor"/>
       <div className="topbar-right"><AutosaveStatus language={language} /><HelpControls language={language}/><AccountControls language={language} disabled={recording || false} /><button className="library-launch" disabled={recording || false} onClick={showLibrary}>▤ {t("Liburutegia", "Biblioteca")}</button><span className="map-status"><i className={mapReady && !mapError ? 'status-dot ready' : 'status-dot'} />{rasterLabel(mapProvider)}</span><button className="icon-button" title="Centrar en Bizkaia" onClick={() => mapRef.current?.flyTo({
           center: START,
           zoom: 10.1,

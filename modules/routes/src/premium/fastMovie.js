@@ -1,4 +1,4 @@
-import {Input,BlobSource,UrlSource,ALL_FORMATS,CanvasSink,AudioSampleSink,AudioSample,Output,Mp4OutputFormat,BufferTarget,AppendOnlyStreamTarget,CanvasSource,AudioSampleSource,Quality,canEncodeVideo,canEncodeAudio} from 'mediabunny';
+import {Input,BlobSource,UrlSource,CustomSource,ALL_FORMATS,CanvasSink,AudioSampleSink,AudioSample,Output,Mp4OutputFormat,BufferTarget,AppendOnlyStreamTarget,CanvasSource,AudioSampleSource,Quality,canEncodeVideo,canEncodeAudio} from 'mediabunny';
 import {drawMovie} from './finalMovie.js';
 import {loadVideoWatermark,drawVideoWatermark} from '../videoWatermark.js';
 const abortIf=signal=>{if(signal?.aborted)throw new DOMException('Exportación cancelada.','AbortError');};
@@ -18,7 +18,7 @@ export async function createFastMovie({clips,incidents=[],composition,onProgress
   let audioCursor=0;
   async function silence(until){while(audioCursor<until-1/48000){abortIf(signal);const frames=Math.max(1,Math.min(4800,Math.round((until-audioCursor)*48000))),sample=new AudioSample({data:new Float32Array(frames*2),format:'f32',sampleRate:48000,numberOfChannels:2,timestamp:audioCursor});try{await audioSource.add(sample);}finally{sample.close();}audioCursor+=frames/48000;}}
   for(const clip of clips){
-   abortIf(signal);const source=clip.getSource?await clip.getSource():{url:await clip.getUrl()};input=new Input({source:source.blob?new BlobSource(source.blob):new UrlSource(source.url),formats:ALL_FORMATS});
+   abortIf(signal);const source=clip.getSource?await clip.getSource():{url:await clip.getUrl()};input=new Input({source:source.source?new CustomSource(source.source):source.blob?new BlobSource(source.blob):new UrlSource(source.url),formats:ALL_FORMATS});
    const track=await input.getPrimaryVideoTrack();if(!track||!await track.canDecode())throw Error('No se puede decodificar «'+clip.name+'» en modo rápido. Prueba Tiempo real.');
    const end=await track.computeDuration();if(clip.startSecond<-.001||clip.endSecond>end+.15||clip.endSecond<=clip.startSecond)throw Error('El vídeo de «'+clip.name+'» no cubre su GPX. Ajusta la sincronización o recorta el tramo.');
    const audioTrack=await input.getPrimaryAudioTrack();if(audioTrack&&!await audioTrack.canDecode())throw Error('No se puede procesar el audio de «'+clip.name+'». Prueba Tiempo real.');
