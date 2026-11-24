@@ -33,3 +33,15 @@ Mantenimiento · AD Mobility permite entrar al centro elegido con la cuenta cent
 Bloquear protege el almacén cifrado del dispositivo hasta volver a introducir su contraseña local. No elimina los datos ni sustituye Salir, que termina la sesión de cuenta. Sigue activo el bloqueo automático por inactividad.
 
 Pruebas adicionales: autorización del propietario, rechazo de otros roles y cuentas, sesión limitada, auditoría, aislamiento, conservación de la primera activación, flujo HTTP completo y acceso visual en un centro ficticio.
+
+## Suscripciones · 0.5.2
+
+En el inicio, **Administrar plataforma · AD Mobility** autentica al propietario central y abre un panel con nombre del centro, estado y revisión. No carga alumnos, usuarios del centro, fichas ni incidencias. Permite Suspender uso, Reactivar y Dar de baja, con confirmación antes de cada cambio. Solo el propietario puede ejecutar estas operaciones; quedan registradas en auditoría.
+
+Suspender y dar de baja bloquean las API del centro para todas las cuentas, incluidas sesiones ya abiertas y acceso técnico. Una baja también retira el centro del selector público. Los datos no se borran. La reactivación conserva cuentas e historial. Cambiar nombre/logo no reactiva la licencia. La administración global permanece disponible aunque el centro Basurto esté suspendido.
+
+Los cursos alojados reciben un bloqueo de lectura que también cubre enlaces emitidos anteriormente. No se pueden retirar copias ya descargadas ni recursos ya cargados en otro navegador. Los instaladores 0.5.2 muestran una pantalla de suspensión al recibir la respuesta del servidor; conservan los pendientes cifrados y no interpretan la suspensión como falta de cobertura. La sesión local normal dura hasta ocho horas y, sin conexión, se permite trabajar hasta su caducidad; no hay bloqueo remoto instantáneo de un dispositivo desconectado. Instalar 0.5.2 en todos los dispositivos para aplicar la pantalla de bloqueo y la revisión periódica de caducidad.
+
+Es control manual de derechos de uso, no una integración de cobros: el propietario decide cuándo suspender o reactivar. La baja es reversible y no equivale a borrar definitivamente datos personales.
+
+Validación: 80 pruebas JavaScript, pruebas de cliente (423 no activa fallback offline y conserva pendientes), HTTP de suspensión/reactivación/baja y recuperación del propietario con su propio centro suspendido, vista del panel con cuentas y centros ficticios. Ninguna suscripción real se modifica durante las pruebas.

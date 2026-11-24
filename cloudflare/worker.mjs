@@ -1,4 +1,4 @@
-import {Schools,DEFAULT_SCHOOL,officeName,publicSchool,authorizePlatformOwner} from './schools.mjs';
+import {Schools,DEFAULT_SCHOOL,officeName,publicSchool,authorizePlatformOwner,subscriptionActive} from './schools.mjs';
 import {Packages} from './packages.mjs';
 import { DurableObject } from 'cloudflare:workers';
 import { Store, Problem, same } from './store.mjs';
@@ -18,9 +18,10 @@ export class BasurtoOffice extends DurableObject {
   this.schools=new Schools(this.store);this.schoolConfig={...DEFAULT_SCHOOL,keyHash:''};
   this.training=new Training(this.store);this.training.initialize();this.packages=new Packages(this.store,env,ctx);
  }
+ courseIds(){return this.store.all("SELECT id FROM course_packages WHERE status!='deleted'").map(r=>r.id)}
  maintenanceSession(identity,school){return this.store.maintenanceSession(identity,school)}
  school(id,full=false){const c=this.schools.get(id);if(!c||full)return c;const {logo,cover,...rest}=c;return rest}
- configureSchool(config){this.schoolConfig={...this.schoolConfig,...config};if(config.id!=='basurto')this.store.env={...this.env,ADMIN_EMAIL:config.adminEmail,ADMIN_ACTIVATION_HASH:config.activationHash,ADMIN_ACTIVATION_EXPIRES:config.activationExpires,ADMIN_RECOVERY_HASH:null};}
+ configureSchool(config){this.schoolConfig={...this.schoolConfig,...config};this.packages.schoolId=config.id;if(config.id!=='basurto')this.store.env={...this.env,ADMIN_EMAIL:config.adminEmail,ADMIN_ACTIVATION_HASH:config.activationHash,ADMIN_ACTIVATION_EXPIRES:config.activationExpires,ADMIN_RECOVERY_HASH:null};}
  async fetch(request){try{
   const url=new URL(request.url),path=url.pathname,store=this.store;
   if(request.method==='GET'&&path==='/api/schools')return json({schools:this.schools.list()});
@@ -28,6 +29,7 @@ export class BasurtoOffice extends DurableObject {
   const token=(request.headers.get('Cookie')||'').split(';').map(x=>x.trim()).find(x=>x.startsWith('basurto='))?.slice(8)||'';
   if(request.method==='GET'){
    const user=store.authenticate(token);
+   if(path==='/api/schools/subscriptions'){authorizePlatformOwner(store,user);return json({schools:this.schools.subscriptions(user)})}
    if(path==='/api/bootstrap')return json({...store.bootstrap(user),schoolId:this.schoolConfig.id});
    if(path==='/api/training')return json({...this.training.data(user),packages:this.packages.list(user)});
    if(path==='/api/training/course')return json(this.training.course(user,url.searchParams.get('version')));
@@ -63,9 +65,9 @@ export class BasurtoOffice extends DurableObject {
    if(row&&row.count>=20)throw new Problem('Demasiados intentos. Espera 15 minutos.',429);
    store.run('INSERT OR REPLACE INTO request_limits VALUES(?,?,?)',key,(row?.count||0)+1,row?.until||now+900);
    if(path==='/api/schools/maintenance'){
-    const config=this.schools.get(data.school);if(!config)throw new Problem('Autoescuela no disponible',404);
+    const config=this.schools.get(data.mode==='subscriptions'?'basurto':data.school);if(!config)throw new Problem('Autoescuela no disponible',404);
     const ownerSession=store.login({...data,role:'admin'});
-    try{const owner=authorizePlatformOwner(store,store.authenticate(ownerSession.token));const ns=this.env.LOCAL_DEVELOPMENT==='true'?this.env.OFFICE:this.env.OFFICE.jurisdiction('eu');const target=ns.get(ns.idFromName(officeName(config.id)));const session=config.id==='basurto'?store.session(owner.id):await target.maintenanceSession(owner,config.id);store.run('INSERT INTO audit(actor,action,entity,at) VALUES(?,?,?,?)',owner.id,'platform_maintenance_open',config.id,new Date().toISOString());return json({school:publicSchool(config),csrf:session.csrf},200,cookie(session.token,request));}finally{store.logout(ownerSession.token)}
+    try{const owner=authorizePlatformOwner(store,store.authenticate(ownerSession.token));if(data.mode==='subscriptions'){const session=store.session(owner.id);return json({platform:true,csrf:session.csrf},200,cookie(session.token,request));}if(!subscriptionActive(config))throw new Problem('El centro tiene el uso suspendido. Reactívalo desde Suscripciones.',423);const ns=this.env.LOCAL_DEVELOPMENT==='true'?this.env.OFFICE:this.env.OFFICE.jurisdiction('eu');const target=ns.get(ns.idFromName(officeName(config.id)));const session=config.id==='basurto'?store.session(owner.id):await target.maintenanceSession(owner,config.id);store.run('INSERT INTO audit(actor,action,entity,at) VALUES(?,?,?,?)',owner.id,'platform_maintenance_open',config.id,new Date().toISOString());return json({school:publicSchool(config),csrf:session.csrf},200,cookie(session.token,request));}finally{store.logout(ownerSession.token)}
    }
    if(path==='/api/school-enter')return json(this.schools.grant(this.schoolConfig,data.key));
    if(path==='/api/login')this.schools.checkGrant(this.schoolConfig,data.schoolGrant);
@@ -75,8 +77,14 @@ export class BasurtoOffice extends DurableObject {
   }
   const user=store.authenticate(token);
   if(!same(request.headers.get('X-CSRF-Token')||'',user.csrf))throw new Problem('Sesión no válida',403);
-  if(path==='/api/schools/manage'){if(this.schoolConfig.id!=='basurto')throw new Problem('Gestión central no disponible',403);return json(this.schools.save(user,data));}
-  if(path==='/api/logout'){store.logout(token);return json({ok:true},200,cookie('',request,true))}
+  if(path==='/api/schools/subscriptions')return this.ctx.blockConcurrencyWhile(async()=>{
+   authorizePlatformOwner(store,user);const config=this.schools.get(data.id);if(!config)throw new Problem('Autoescuela no disponible',404);if(!['active','suspended','cancelled'].includes(data.status))throw new Problem('Estado no válido');if(data.revision!==(config.subscription?.revision||0))throw new Problem('La suscripción ha cambiado. Actualiza el panel.',409);
+   const ns=this.env.LOCAL_DEVELOPMENT==='true'?this.env.OFFICE:this.env.OFFICE.jurisdiction('eu');const ids=data.id==='basurto'?this.courseIds():await ns.get(ns.idFromName(officeName(data.id))).courseIds();const keys=['schools/blocked/'+config.id,...ids.map(id=>'courses/blocked/'+id)];
+   for(const key of keys){if(data.status==='active')await this.env.TRAINING_FILES.delete(key);else await this.env.TRAINING_FILES.put(key,'blocked');}
+   return json(this.schools.changeSubscription(user,data));
+  });
+  if(path==='/api/schools/manage'){authorizePlatformOwner(store,user);if(this.schoolConfig.id!=='basurto')throw new Problem('Gestión central no disponible',403);return json(this.schools.save(user,data));}
+  if(path==='/api/logout'||path==='/api/schools/logout'){store.logout(token);return json({ok:true},200,cookie('',request,true))}
   if(path==='/api/training/action'){const result=typeof data.action==='string'&&data.action.startsWith('package_')?await this.ctx.blockConcurrencyWhile(()=>this.packages.action(user,data)):this.training.mutate(user,data);await this.cleanupTrainingFiles();return json(result);}
   if(path==='/api/action')return json(store.mutate(user,data));
   throw new Problem('No encontrado',404);
@@ -110,7 +118,7 @@ export class BasurtoOffice extends DurableObject {
 }
 export default {async fetch(request,env){
  if(new URL(request.url).pathname.startsWith('/api/')){
-  try{const namespace=env.LOCAL_DEVELOPMENT==='true'?env.OFFICE:env.OFFICE.jurisdiction('eu');const url=new URL(request.url),id=url.searchParams.get('school')||'basurto';const registry=namespace.get(namespace.idFromName('basurto-office-v1'));const config=await registry.school(id,['/api/config','/api/school-enter'].includes(url.pathname));if(!config)return json({error:'Autoescuela no disponible'},404);if(url.pathname.startsWith('/api/schools')&&id!=='basurto')return json({error:'Gestión central no disponible'},403);const office=namespace.get(namespace.idFromName(officeName(id)));await office.configureSchool(config);return office.fetch(request);}catch(e){return json({error:e instanceof Problem?e.message:'No se pudo abrir la autoescuela'},e instanceof Problem?e.status:500)}
+  try{const namespace=env.LOCAL_DEVELOPMENT==='true'?env.OFFICE:env.OFFICE.jurisdiction('eu');const url=new URL(request.url),id=url.searchParams.get('school')||'basurto';const registry=namespace.get(namespace.idFromName('basurto-office-v1'));const config=await registry.school(id,['/api/config','/api/school-enter'].includes(url.pathname));if(!config)return json({error:'Autoescuela no disponible'},404);if(!url.pathname.startsWith('/api/schools')&&!subscriptionActive(config))return json({error:'El uso de esta autoescuela está suspendido. Contacta con AD Mobility.',code:'SUBSCRIPTION_BLOCKED'},423);if(url.pathname.startsWith('/api/schools')&&id!=='basurto')return json({error:'Gestión central no disponible'},403);const office=namespace.get(namespace.idFromName(officeName(id)));await office.configureSchool(config);return office.fetch(request);}catch(e){return json({error:e instanceof Problem?e.message:'No se pudo abrir la autoescuela'},e instanceof Problem?e.status:500)}
  }
  const response=await env.ASSETS.fetch(request),result=new Response(response.body,response);for(const [k,v] of Object.entries(headers))result.headers.set(k,v);if(new URL(request.url).pathname.startsWith('/routes/')){result.headers.set('Content-Security-Policy',"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' blob: https://www.geo.euskadi.eus https://www.ign.es https://tile.openstreetmap.org https://www.cartociudad.es; img-src 'self' data: blob: https://www.geo.euskadi.eus https://www.ign.es https://tile.openstreetmap.org; media-src 'self' blob:; frame-src 'self' blob:; worker-src 'self' blob:; font-src 'self'; object-src 'none'; frame-ancestors 'self'; base-uri 'self'; form-action 'none'");result.headers.set('Referrer-Policy','strict-origin-when-cross-origin');result.headers.set('Permissions-Policy','camera=(), microphone=(self), geolocation=()')}if(new URL(request.url).pathname.replace(/\.html$/,'')==='/pdf-viewer')result.headers.set('Content-Security-Policy',headers['Content-Security-Policy'].replace("frame-ancestors 'none'","frame-ancestors 'self'"));return result;
 }};

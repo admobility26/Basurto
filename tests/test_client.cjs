@@ -25,5 +25,11 @@ vm.createContext(context);let src=fs.readFileSync('static/app.js','utf8');src=sr
  await assert.rejects(()=>vm.runInContext(`saveAction({action:'delete_record'})`,context),/conexión/);
  await assert.rejects(()=>vm.runInContext(`saveAction({action:'edit_user',password:'private'})`,context),/conexión/);
  assert.equal(vm.runInContext('pending.length',context),0);
+ let licenseGates=0;context.recordGate=()=>licenseGates++;
+ vm.runInContext(`showLicenseGate=()=>recordGate();state={user:{id:'office',expires:Date.now()/1000+3600}};pending=[{data:{action:'sheet',note:'retain'}}];drafts={lesson:{note:'retain draft'}};offline=false;`,context);
+ context.fetch=async()=>({ok:false,status:423,json:async()=>({error:'Centro suspendido'})});
+ const beforeSuspension=renderCount;await vm.runInContext('startAccount()',context);await vm.runInContext('persist()',context);
+ assert.equal(renderCount,beforeSuspension,'A definitive suspension must not fall back to the cached application');assert(licenseGates>0);assert.equal(nativeRecord.state.licenseBlocked,true);assert.equal(vm.runInContext('pending.length',context),1);assert.equal(vm.runInContext('drafts.lesson.note',context),'retain draft');
+ await assert.rejects(()=>vm.runInContext(`saveAction({action:'sheet'})`,context),/acceso/);
  console.log('PASS: native encrypted adapter restart, expired-session pending retention, account isolation; encrypted cache, separate key/id, reload recovery, provisional offline reservation, wrong-key rejection and logout cleanup');
 })().catch(e=>{console.error(e);process.exitCode=1});
