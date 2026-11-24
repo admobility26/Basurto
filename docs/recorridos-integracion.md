@@ -22,4 +22,6 @@ La descarga nativa de teselas sigue el adaptador de escritorio de Elorrieta: `ma
 - 7 pruebas Rust, incluyendo lectura por token, límites, otra cuenta y token cerrado.
 - Inspección visual del GPX integrado y navegación de regreso en entorno local con cuenta ficticia.
 - Lectura de duración de MP4 con CustomSource y URL deliberadamente no descargable: correcta.
-- Pendiente: exportación completa en la aplicación instalada de Mac con el recorrido del usuario. No considerar la prueba de lectura equivalente a esa validación.
+- Exportación completa comprobada en Basurto.app 0.4.3 en Mac: Ruta E10.2, modo Fluida, 117,07 segundos, H.264 1170 × 720 a 25 fps, 2.925 fotogramas y pista AAC estéreo. Decodificación íntegra sin errores; fotograma exportado revisado con mapa, vídeo y marca Basurto.
+- La prueba no valida narración con micrófono ni ejecución física en Windows/Android.
+- El DMG contiene una aplicación Tauri universal (arm64/x86_64), identificador com.admobility.basurto. Su interfaz usa WKWebView integrado; no lanza Safari para ejecutar la aplicación.
