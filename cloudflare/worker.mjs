@@ -1,3 +1,4 @@
+import {Schools,DEFAULT_SCHOOL,officeName,publicSchool} from './schools.mjs';
 import {Packages} from './packages.mjs';
 import { DurableObject } from 'cloudflare:workers';
 import { Store, Problem, same } from './store.mjs';
@@ -14,15 +15,19 @@ export class BasurtoOffice extends DurableObject {
  constructor(ctx,env){super(ctx,env);this.ctx=ctx;this.env=env;const sql=ctx.storage.sql;
   ctx.storage.transactionSync(()=>{sql.exec(SCHEMA);sql.exec('CREATE TABLE IF NOT EXISTS request_limits(key TEXT PRIMARY KEY, count INTEGER NOT NULL, until REAL NOT NULL)')});
   this.store=new Store({all:(q,...p)=>sql.exec(q,...p).toArray(),run:(q,...p)=>{sql.exec(q,...p).toArray()},tx:fn=>ctx.storage.transactionSync(fn)},env);
+  this.schools=new Schools(this.store);this.schoolConfig={...DEFAULT_SCHOOL,keyHash:''};
   this.training=new Training(this.store);this.training.initialize();this.packages=new Packages(this.store,env,ctx);
  }
+ school(id,full=false){const c=this.schools.get(id);if(!c||full)return c;const {logo,cover,...rest}=c;return rest}
+ configureSchool(config){this.schoolConfig={...this.schoolConfig,...config};if(config.id!=='basurto')this.store.env={...this.env,ADMIN_EMAIL:config.adminEmail,ADMIN_ACTIVATION_HASH:config.activationHash,ADMIN_ACTIVATION_EXPIRES:config.activationExpires,ADMIN_RECOVERY_HASH:null};}
  async fetch(request){try{
   const url=new URL(request.url),path=url.pathname,store=this.store;
-  if(request.method==='GET'&&path==='/api/config')return json({demo:false,setup:store.setupAvailable()});
+  if(request.method==='GET'&&path==='/api/schools')return json({schools:this.schools.list()});
+  if(request.method==='GET'&&path==='/api/config')return json({demo:false,setup:store.setupAvailable(),school:publicSchool(this.schoolConfig)});
   const token=(request.headers.get('Cookie')||'').split(';').map(x=>x.trim()).find(x=>x.startsWith('basurto='))?.slice(8)||'';
   if(request.method==='GET'){
    const user=store.authenticate(token);
-   if(path==='/api/bootstrap')return json(store.bootstrap(user));
+   if(path==='/api/bootstrap')return json({...store.bootstrap(user),schoolId:this.schoolConfig.id});
    if(path==='/api/training')return json({...this.training.data(user),packages:this.packages.list(user)});
    if(path==='/api/training/course')return json(this.training.course(user,url.searchParams.get('version')));
    if(path==='/api/training/lesson')return json(this.training.lesson(user,url.searchParams.get('id')));
@@ -43,25 +48,28 @@ export class BasurtoOffice extends DurableObject {
   if(path==='/api/training/package-file'){const user=store.authenticate(token);if(!same(request.headers.get('X-CSRF-Token')||'',user.csrf))throw new Problem('Sesión no válida',403);return json(await this.packages.upload(user,request,url));}
   if(path==='/api/training/upload')return await this.upload(request,token);
   if(request.headers.get('Content-Type')?.split(';')[0]!=='application/json')throw new Problem('Formato inválido',415);
-  const bodyLimit=path==='/api/training/action'?1048576:16000;
+  const bodyLimit=path==='/api/schools/manage'?1800000:path==='/api/training/action'?1048576:16000;
   if(Number(request.headers.get('Content-Length'))>bodyLimit)throw new Problem('Solicitud demasiado grande',413);
   const reader=request.body?.getReader();if(!reader)throw new Problem('Solicitud inválida');let size=0,chunks=[];
   while(true){const {value,done}=await reader.read();if(done)break;size+=value.length;if(size>bodyLimit){await reader.cancel();throw new Problem('Solicitud demasiado grande',413)}chunks.push(value)}
   let data;try{data=JSON.parse(Buffer.concat(chunks).toString('utf8'))}catch{throw new Problem('Solicitud inválida')}
   if(!data||typeof data!=='object'||Array.isArray(data))throw new Problem('Solicitud inválida');
   // Rate limit anonymous expensive auth without keeping plaintext network identifiers.
-  if(path==='/api/login'||path==='/api/setup'||path==='/api/recover'){
+  if(path==='/api/login'||path==='/api/setup'||path==='/api/recover'||path==='/api/school-enter'){
    const {digest}=await import('./store.mjs');const key=digest((request.headers.get('CF-Connecting-IP')||'local')+':'+path),now=Date.now()/1000;
    store.run('DELETE FROM request_limits WHERE until<?',now);
    const row=store.one('SELECT * FROM request_limits WHERE key=?',key);
    if(row&&row.count>=20)throw new Problem('Demasiados intentos. Espera 15 minutos.',429);
    store.run('INSERT OR REPLACE INTO request_limits VALUES(?,?,?)',key,(row?.count||0)+1,row?.until||now+900);
+   if(path==='/api/school-enter')return json(this.schools.grant(this.schoolConfig,data.key));
+   if(path==='/api/login')this.schools.checkGrant(this.schoolConfig,data.schoolGrant);
    if(path==='/api/recover')return json(store.recover(data),200,cookie('',request,true));
    const session=path==='/api/setup'?store.activate(data):store.login(data);
    return json({csrf:session.csrf},200,cookie(session.token,request));
   }
   const user=store.authenticate(token);
   if(!same(request.headers.get('X-CSRF-Token')||'',user.csrf))throw new Problem('Sesión no válida',403);
+  if(path==='/api/schools/manage'){if(this.schoolConfig.id!=='basurto')throw new Problem('Gestión central no disponible',403);return json(this.schools.save(user,data));}
   if(path==='/api/logout'){store.logout(token);return json({ok:true},200,cookie('',request,true))}
   if(path==='/api/training/action'){const result=typeof data.action==='string'&&data.action.startsWith('package_')?await this.ctx.blockConcurrencyWhile(()=>this.packages.action(user,data)):this.training.mutate(user,data);await this.cleanupTrainingFiles();return json(result);}
   if(path==='/api/action')return json(store.mutate(user,data));
@@ -96,7 +104,7 @@ export class BasurtoOffice extends DurableObject {
 }
 export default {async fetch(request,env){
  if(new URL(request.url).pathname.startsWith('/api/')){
-  const namespace=env.LOCAL_DEVELOPMENT==='true'?env.OFFICE:env.OFFICE.jurisdiction('eu');return namespace.get(namespace.idFromName('basurto-office-v1')).fetch(request);
+  try{const namespace=env.LOCAL_DEVELOPMENT==='true'?env.OFFICE:env.OFFICE.jurisdiction('eu');const url=new URL(request.url),id=url.searchParams.get('school')||'basurto';const registry=namespace.get(namespace.idFromName('basurto-office-v1'));const config=await registry.school(id,['/api/config','/api/school-enter'].includes(url.pathname));if(!config)return json({error:'Autoescuela no disponible'},404);if(url.pathname.startsWith('/api/schools')&&id!=='basurto')return json({error:'Gestión central no disponible'},403);const office=namespace.get(namespace.idFromName(officeName(id)));await office.configureSchool(config);return office.fetch(request);}catch(e){return json({error:e instanceof Problem?e.message:'No se pudo abrir la autoescuela'},e instanceof Problem?e.status:500)}
  }
  const response=await env.ASSETS.fetch(request),result=new Response(response.body,response);for(const [k,v] of Object.entries(headers))result.headers.set(k,v);if(new URL(request.url).pathname.startsWith('/routes/')){result.headers.set('Content-Security-Policy',"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' blob: https://www.geo.euskadi.eus https://www.ign.es https://tile.openstreetmap.org https://www.cartociudad.es; img-src 'self' data: blob: https://www.geo.euskadi.eus https://www.ign.es https://tile.openstreetmap.org; media-src 'self' blob:; frame-src 'self' blob:; worker-src 'self' blob:; font-src 'self'; object-src 'none'; frame-ancestors 'self'; base-uri 'self'; form-action 'none'");result.headers.set('Referrer-Policy','strict-origin-when-cross-origin');result.headers.set('Permissions-Policy','camera=(), microphone=(self), geolocation=()')}if(new URL(request.url).pathname.replace(/\.html$/,'')==='/pdf-viewer')result.headers.set('Content-Security-Policy',headers['Content-Security-Policy'].replace("frame-ancestors 'none'","frame-ancestors 'self'"));return result;
 }};
