@@ -1,4 +1,4 @@
-import {Schools,DEFAULT_SCHOOL,officeName,publicSchool} from './schools.mjs';
+import {Schools,DEFAULT_SCHOOL,officeName,publicSchool,authorizePlatformOwner} from './schools.mjs';
 import {Packages} from './packages.mjs';
 import { DurableObject } from 'cloudflare:workers';
 import { Store, Problem, same } from './store.mjs';
@@ -18,6 +18,7 @@ export class BasurtoOffice extends DurableObject {
   this.schools=new Schools(this.store);this.schoolConfig={...DEFAULT_SCHOOL,keyHash:''};
   this.training=new Training(this.store);this.training.initialize();this.packages=new Packages(this.store,env,ctx);
  }
+ maintenanceSession(identity,school){return this.store.maintenanceSession(identity,school)}
  school(id,full=false){const c=this.schools.get(id);if(!c||full)return c;const {logo,cover,...rest}=c;return rest}
  configureSchool(config){this.schoolConfig={...this.schoolConfig,...config};if(config.id!=='basurto')this.store.env={...this.env,ADMIN_EMAIL:config.adminEmail,ADMIN_ACTIVATION_HASH:config.activationHash,ADMIN_ACTIVATION_EXPIRES:config.activationExpires,ADMIN_RECOVERY_HASH:null};}
  async fetch(request){try{
@@ -55,12 +56,17 @@ export class BasurtoOffice extends DurableObject {
   let data;try{data=JSON.parse(Buffer.concat(chunks).toString('utf8'))}catch{throw new Problem('Solicitud inválida')}
   if(!data||typeof data!=='object'||Array.isArray(data))throw new Problem('Solicitud inválida');
   // Rate limit anonymous expensive auth without keeping plaintext network identifiers.
-  if(path==='/api/login'||path==='/api/setup'||path==='/api/recover'||path==='/api/school-enter'){
+  if(path==='/api/login'||path==='/api/setup'||path==='/api/recover'||path==='/api/school-enter'||path==='/api/schools/maintenance'){
    const {digest}=await import('./store.mjs');const key=digest((request.headers.get('CF-Connecting-IP')||'local')+':'+path),now=Date.now()/1000;
    store.run('DELETE FROM request_limits WHERE until<?',now);
    const row=store.one('SELECT * FROM request_limits WHERE key=?',key);
    if(row&&row.count>=20)throw new Problem('Demasiados intentos. Espera 15 minutos.',429);
    store.run('INSERT OR REPLACE INTO request_limits VALUES(?,?,?)',key,(row?.count||0)+1,row?.until||now+900);
+   if(path==='/api/schools/maintenance'){
+    const config=this.schools.get(data.school);if(!config)throw new Problem('Autoescuela no disponible',404);
+    const ownerSession=store.login({...data,role:'admin'});
+    try{const owner=authorizePlatformOwner(store,store.authenticate(ownerSession.token));const ns=this.env.LOCAL_DEVELOPMENT==='true'?this.env.OFFICE:this.env.OFFICE.jurisdiction('eu');const target=ns.get(ns.idFromName(officeName(config.id)));const session=config.id==='basurto'?store.session(owner.id):await target.maintenanceSession(owner,config.id);store.run('INSERT INTO audit(actor,action,entity,at) VALUES(?,?,?,?)',owner.id,'platform_maintenance_open',config.id,new Date().toISOString());return json({school:publicSchool(config),csrf:session.csrf},200,cookie(session.token,request));}finally{store.logout(ownerSession.token)}
+   }
    if(path==='/api/school-enter')return json(this.schools.grant(this.schoolConfig,data.key));
    if(path==='/api/login')this.schools.checkGrant(this.schoolConfig,data.schoolGrant);
    if(path==='/api/recover')return json(store.recover(data),200,cookie('',request,true));

@@ -3,3 +3,14 @@
 button.primary,nav button.active,.role-picker .selected,.native-lock,.native-back{background:var(--school-primary)!important;border-color:var(--school-primary)!important;color:var(--school-on-primary)!important}.login-intro{background-color:var(--school-secondary)!important;background-image:var(--school-cover)!important;background-size:cover;background-position:center}.brand-logo{object-fit:contain}.school-change{margin-top:12px}input[type=color]{height:48px;width:100%}
 
 .login-intro h1,.login-intro p{color:white;text-shadow:0 1px 5px #0008}.school-card:focus-visible{outline:3px solid var(--school-primary)}
+
+/* The directory belongs to the platform, never to the previously opened school. */
+html.school-selector{--school-primary:#303a46!important;--school-secondary:#202731!important;--school-on-primary:#fff!important;--accent:#303a46!important;--school-cover:none!important;background:#f5f6f8;color:#202731}
+.school-selector body{background:#f5f6f8;color:#202731}
+.school-selector .basurto-help-bar{background:#fff!important;border-color:#e0e4e9!important;color:#4c5562!important}
+.school-selector button:hover{background:#eef1f5}
+.school-selector button:focus-visible,.school-selector input:focus-visible{outline-color:#64748b}
+.school-selector .school-card{background:#fff;border-color:#dfe4ea;color:#202731}
+.school-selector .school-card:hover,.school-selector .school-card[aria-pressed=true]{background:#f8fafc;border-color:#8793a3;box-shadow:0 8px 26px #26344512}
+.school-selector .school-card span,.school-selector .school-heading p,.school-selector .muted{color:#616b79}
+.school-selector .native-lock{background:#303a46!important;border-color:#303a46!important;color:#fff!important}

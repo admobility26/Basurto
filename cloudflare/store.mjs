@@ -18,7 +18,7 @@ export class Store {
  archived(kind,entity){return Boolean(this.one('SELECT 1 FROM archived_records WHERE kind=? AND entity=?',kind,entity))}
  revision(row){return digest(JSON.stringify(canonical(row)))}
  account(row){const {password,...safe}=row;return {...safe,revision:this.revision(row)}}
- setupAvailable(){return Boolean(this.env.ADMIN_EMAIL&&this.env.ADMIN_ACTIVATION_HASH&&Number(this.env.ADMIN_ACTIVATION_EXPIRES)>seconds()&&!this.one("SELECT 1 FROM users WHERE role IN ('admin','manager')"))}
+ setupAvailable(){return Boolean(this.env.ADMIN_EMAIL&&this.env.ADMIN_ACTIVATION_HASH&&Number(this.env.ADMIN_ACTIVATION_EXPIRES)>seconds()&&!this.one("SELECT 1 FROM users WHERE role IN ('admin','manager') AND substr(id,1,9)!='platform_'"))}
  activate(data){return this.tx(()=>{
   const secret=required(data,'activation',100),username=required(data,'username',100),pass=password(data);
   if(pass!==data.confirmation)throw new Problem('Las contraseñas deben coincidir');
@@ -39,6 +39,7 @@ export class Store {
   return {ok:true};
  })}
  session(uid){const token=id(),csrf=id();this.run('INSERT INTO sessions VALUES(?,?,?,?)',digest(token),uid,csrf,seconds()+28800);return {token,csrf}}
+ maintenanceSession(identity,school){return this.tx(()=>{const uid='platform_'+digest(identity.id+':'+school).slice(0,40);if(!this.one('SELECT 1 FROM users WHERE id=?',uid))this.run('INSERT INTO users VALUES(?,?,?,?,?,1)',uid,'AD Mobility · Mantenimiento','__platform__'+uid,hash(id()),'admin');const session=this.session(uid);this.run('UPDATE sessions SET expires=? WHERE token=?',Math.min(identity.expires,seconds()+3600),digest(session.token));this.run('INSERT INTO audit(actor,action,entity,at) VALUES(?,?,?,?)',uid,'platform_maintenance_enter',identity.id,now());return session;})}
  login(data){const username=required(data,'username',100);if(typeof data.password!=='string'||data.password.length>200)throw new Problem('Usuario o contraseña incorrectos',401);
   const attempt=this.one('SELECT * FROM login_attempts WHERE username=?',username);
   if(attempt&&attempt.attempts>=5&&attempt.until>seconds())throw new Problem('Espera unos minutos antes de volver a intentarlo',429);
@@ -52,12 +53,12 @@ export class Store {
   if(data.role!==undefined&&data.role!==u.role)throw new Problem('Contraseña correcta. Selecciona '+({teacher:'Profesor',admin:'Administración',manager:'Gerencia'}[u.role])+' para entrar con esta cuenta.',403);
   return this.session(u.id);
  }
- authenticate(token){const u=this.one('SELECT u.id,u.name,u.role,s.csrf,s.expires FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires>? AND u.active=1',digest(token),seconds());if(!u)throw new Problem('Inicia sesión para continuar',401);return u}
+ authenticate(token){const u=this.one('SELECT u.id,u.name,u.role,s.csrf,s.expires FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires>? AND u.active=1',digest(token),seconds());if(!u)throw new Problem('Inicia sesión para continuar',401);return {...u,maintenance:u.id.startsWith('platform_')}}
  logout(token){this.run('DELETE FROM sessions WHERE token=?',digest(token))}
  bootstrap(user){const teacher=user.role==='teacher',p=teacher?[user.id]:[];
   const students=this.all('SELECT id,name,permit,teacher_id FROM students'+(teacher?' WHERE teacher_id=?':''),...p);
   const lessons=this.all('SELECT l.*,s.ratings,s.note,s.next_goal,s.minutes,s.updated_at FROM lessons l LEFT JOIN sheets s ON s.lesson_id=l.id WHERE '+(teacher?'l.teacher_id=? AND EXISTS(SELECT 1 FROM students st WHERE st.id=l.student_id AND st.teacher_id=?)':'1=1')+' ORDER BY l.start',...(teacher?[user.id,user.id]:[])).map(l=>({...l,ratings:l.ratings?JSON.parse(l.ratings):null}));
-  return {user:{id:user.id,name:user.name,role:user.role,expires:user.expires},csrf:user.csrf,students:students.map(r=>({...r,revision:this.revision(r),archived:this.archived('student',r.id)})),lessons:lessons.map(r=>({...r,archived:this.archived('lesson',r.id)})),vehicle_blocks:this.all('SELECT * FROM vehicle_blocks WHERE active=1 ORDER BY start').map(({note,...row})=>teacher?row:{...row,note}),vehicles:this.all('SELECT * FROM vehicles').map(r=>({...r,archived:this.archived('vehicle',r.id)})),users:teacher?this.all('SELECT id,name,role,active FROM users WHERE id=?',user.id):this.all('SELECT * FROM users').map(r=>this.account(r)),incidents_revision:this.revision(this.incidents(user)),goals:GOALS,server_time:now()};
+  return {user:{id:user.id,name:user.name,role:user.role,expires:user.expires,maintenance:!!user.maintenance},csrf:user.csrf,students:students.map(r=>({...r,revision:this.revision(r),archived:this.archived('student',r.id)})),lessons:lessons.map(r=>({...r,archived:this.archived('lesson',r.id)})),vehicle_blocks:this.all('SELECT * FROM vehicle_blocks WHERE active=1 ORDER BY start').map(({note,...row})=>teacher?row:{...row,note}),vehicles:this.all('SELECT * FROM vehicles').map(r=>({...r,archived:this.archived('vehicle',r.id)})),users:teacher?this.all('SELECT id,name,role,active FROM users WHERE id=?',user.id):this.all('SELECT * FROM users').map(r=>this.account(r)),incidents_revision:this.revision(this.incidents(user)),goals:GOALS,server_time:now()};
  }
  ownedLesson(user,entity){const row=this.one('SELECT l.* FROM lessons l JOIN students s ON s.id=l.student_id WHERE l.id=?'+(user.role==='teacher'?' AND l.teacher_id=? AND s.teacher_id=?':''),entity,...(user.role==='teacher'?[user.id,user.id]:[]));if(!row)throw new Problem('Clase no disponible',404);if(this.archived('lesson',entity))throw new Problem('La clase fue eliminada en oficina. Conserva tu propuesta para revisarla.',409);return row}
  ownedIncident(user,entity){const row=this.one('SELECT i.* FROM incidents i JOIN students s ON s.id=i.student_id WHERE i.id=?'+(user.role==='teacher'?' AND i.teacher_id=? AND s.teacher_id=?':''),entity,...(user.role==='teacher'?[user.id,user.id]:[]));if(!row||this.archived('incident',entity))throw new Problem('Incidencia no disponible',404);return row}

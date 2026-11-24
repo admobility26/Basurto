@@ -26,7 +26,7 @@ struct AppState{vault:Mutex<Vault>,client:reqwest::Client}
 #[derive(Serialize)]struct ApiOutput{status:u16,body:String,headers:std::collections::HashMap<String,String>}
 #[tauri::command]async fn api_request(input:ApiInput,state:State<'_,AppState>)->Result<ApiOutput,String>{
  let path=input.path.split('?').next().unwrap_or("");
- if !["/api/schools","/api/schools/manage","/api/school-enter","/api/config","/api/login","/api/logout","/api/setup","/api/recover","/api/bootstrap","/api/action","/api/incidents","/api/training","/api/training/lesson","/api/training/course","/api/training/presentation","/api/training/file","/api/training/action","/api/training/upload","/api/training/package-file"].contains(&path)||input.path.contains('#')||!matches!(input.method.as_str(),"GET"|"POST"){return Err("Solicitud no permitida".into())}
+ if !["/api/schools","/api/schools/manage","/api/schools/maintenance","/api/school-enter","/api/config","/api/login","/api/logout","/api/setup","/api/recover","/api/bootstrap","/api/action","/api/incidents","/api/training","/api/training/lesson","/api/training/course","/api/training/presentation","/api/training/file","/api/training/action","/api/training/upload","/api/training/package-file"].contains(&path)||input.path.contains('#')||!matches!(input.method.as_str(),"GET"|"POST"){return Err("Solicitud no permitida".into())}
  let cookie={let v=state.vault.lock().map_err(|_|"Error local")?;if !v.unlocked(){return Err("Caja local bloqueada".into())}v.contents.cookie.clone()};
  let mut request=state.client.request(reqwest::Method::from_bytes(input.method.as_bytes()).map_err(|_|"Método inválido")?,format!("{SERVER}{}",input.path)).header("Origin",SERVER);
  if !cookie.is_empty(){request=request.header("Cookie",cookie)}

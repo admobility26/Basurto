@@ -17,3 +17,5 @@ export class Schools{
  checkGrant(config,token){if(!config.keyHash)return;if(typeof token!=='string'||!this.s.one('SELECT 1 FROM school_grants WHERE token=? AND expires>?',digest(token),Date.now()/1000))throw new Problem('Vuelve a seleccionar el centro e introduce su clave',403)}
 }
 export function publicSchool(config){const {id,name,primary,secondary,logo,cover}=config;return {id,name,primary,secondary,logo,cover,requiresKey:!!config.keyHash}}
+
+export function authorizePlatformOwner(store,user){const row=store.one('SELECT username FROM users WHERE id=?',user.id);const owner=store.env.PLATFORM_OWNER_EMAIL||'admobility26@gmail.com';if(user.role!=='admin'||row?.username.toLowerCase()!==owner.toLowerCase())throw new Problem('Esta cuenta no tiene acceso de mantenimiento a la plataforma',403);return user;}

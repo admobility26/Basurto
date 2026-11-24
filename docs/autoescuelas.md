@@ -18,8 +18,18 @@ El primer administrador selecciona el centro, introduce su clave y pulsa **Activ
 
 ## Comprobaciones
 
-76 pruebas JavaScript correctas, incluyendo claves, permisos de gestión, campos públicos, caducidad de concesiones y sesiones aisladas. Prueba HTTP local de alta de un segundo centro, activación de administrador, acceso con clave, rechazo de clave incorrecta y rechazo de sesiones cruzadas. Prueba visual de selección, acceso personal y regreso al selector con datos ficticios; ningún centro de prueba se crea en producción.
+78 pruebas JavaScript correctas, incluyendo claves, permisos de gestión, campos públicos, caducidad de concesiones y sesiones aisladas. Prueba HTTP local de alta de un segundo centro, activación de administrador, acceso con clave, rechazo de clave incorrecta y rechazo de sesiones cruzadas. Prueba visual de selección, acceso personal y regreso al selector con datos ficticios; ningún centro de prueba se crea en producción.
 
 Pendiente de datos reales: añadir las marcas que proporcione el propietario. La recuperación de contraseña de nuevos centros requiere un flujo de recuperación específico; no reutiliza la clave de recuperación de Basurto. Los documentos/cursos importados conservan su contenido original, incluyendo los logotipos que tengan dentro.
 
 Corrección del alta: se admiten mayúsculas, espacios y acentos enviados como identificador por instaladores 0.5.0. Se normalizan solo al guardar; el enrutado de oficinas sigue validando identificadores canónicos. Una colisión en un alta devuelve 409 y nunca sobrescribe otro centro.
+
+## Inicio neutro y mantenimiento · 0.5.1
+
+El selector usa colores neutros y el título Autoescuelas · AD Mobility, incluso al elegir una tarjeta y escribir la clave. La marca de cada centro se aplica después de verificar el acceso. La pantalla local de desbloqueo no muestra el logo de Basurto. El nombre del paquete se conserva para actualizar las instalaciones existentes.
+
+Mantenimiento · AD Mobility permite entrar al centro elegido con la cuenta central del propietario, admobility26@gmail.com, y su contraseña habitual. Se verifica en la oficina central con límite de intentos. No se piden las claves de los centros ni se distribuye la contraseña. El servidor crea una sesión de administración del centro, de hasta una hora, con actor específico y registro de acceso y cambios. No consume la activación del administrador del centro. Los administradores y gerentes de los centros no adquieren acceso global. El propietario puede usar su acceso normal en Basurto. La variable de servidor PLATFORM_OWNER_EMAIL permite cambiar al propietario de forma controlada; no forma parte del formulario público.
+
+Bloquear protege el almacén cifrado del dispositivo hasta volver a introducir su contraseña local. No elimina los datos ni sustituye Salir, que termina la sesión de cuenta. Sigue activo el bloqueo automático por inactividad.
+
+Pruebas adicionales: autorización del propietario, rechazo de otros roles y cuentas, sesión limitada, auditoría, aislamiento, conservación de la primera activación, flujo HTTP completo y acceso visual en un centro ficticio.
