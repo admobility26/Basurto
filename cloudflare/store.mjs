@@ -26,6 +26,12 @@ export class Store {
   const uid=id();this.run('INSERT INTO users VALUES(?,?,?,?,?,1)',uid,'Administración',username,hash(pass),'admin');
   this.run('INSERT INTO audit(actor,action,entity,at) VALUES(?,?,?,?)',uid,'activate_admin',uid,now());return this.session(uid);
  })}
+ completeAccessLink(link,pass){
+  let uid=link.user_id;
+  if(link.purpose==='reset'){const target=this.one("SELECT * FROM users WHERE id=? AND active=1",uid);if(!target||this.revision(target)!==link.revision)throw new Problem('La cuenta ha cambiado. Solicita otro enlace.',409);this.run('UPDATE users SET password=? WHERE id=?',hash(pass),uid);this.run('DELETE FROM sessions WHERE user_id=?',uid);this.run('DELETE FROM login_attempts WHERE username=?',target.username);}
+  else{if(link.purpose==='setup'&&this.one("SELECT 1 FROM users WHERE role IN ('admin','manager') AND substr(id,1,9)!='platform_'"))throw new Problem('Administración ya está activada',409);if(this.one('SELECT 1 FROM users WHERE lower(username)=?',link.email))throw new Problem('La cuenta ya existe',409);uid=id();this.run('INSERT INTO users VALUES(?,?,?,?,?,1)',uid,link.name,link.email,hash(pass),link.purpose==='setup'?'admin':'teacher');}
+  this.run('INSERT INTO audit(actor,action,entity,at) VALUES(?,?,?,?)',uid,'access_link_completed',uid,now());
+ }
  recover(data){return this.tx(()=>{
   const token=required(data,'recovery',160),username=required(data,'username',100),tokenHash=digest(token);
   if(!this.env.ADMIN_RECOVERY_HASH||Number(this.env.ADMIN_RECOVERY_EXPIRES)<=seconds()||!Number.isFinite(Number(this.env.ADMIN_RECOVERY_EXPIRES))||username!==this.env.ADMIN_EMAIL||!same(tokenHash,this.env.ADMIN_RECOVERY_HASH)||this.one("SELECT 1 FROM audit WHERE action='admin_password_recovery' AND entity=?",tokenHash))throw new Problem('Recuperación no válida, caducada o ya utilizada',403);

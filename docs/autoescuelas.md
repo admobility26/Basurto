@@ -45,3 +45,17 @@ Los cursos alojados reciben un bloqueo de lectura que también cubre enlaces emi
 Es control manual de derechos de uso, no una integración de cobros: el propietario decide cuándo suspender o reactivar. La baja es reversible y no equivale a borrar definitivamente datos personales.
 
 Validación: 80 pruebas JavaScript, pruebas de cliente (423 no activa fallback offline y conserva pendientes), HTTP de suspensión/reactivación/baja y recuperación del propietario con su propio centro suspendido, vista del panel con cuentas y centros ficticios. Ninguna suscripción real se modifica durante las pruebas.
+
+## Invitaciones y recuperación (0.5.4)
+
+- Mantenimiento → Crear o editar autoescuelas permite crear centros sin clave compartida. Después, en la tarjeta del centro, «Invitar o recuperar acceso» crea una invitación para su primer administrador.
+- El propietario también puede emitir recuperación para una cuenta activa de ese centro cuyo usuario sea un correo. No restablece la cuenta global de AD Mobility por esta vía.
+- Administración y gerencia del centro tienen «Invitar profesor» y «Enlace de recuperación» para profesores. Las altas manuales y los usuarios existentes se conservan.
+- Las invitaciones duran 48 horas; los enlaces de recuperación, una hora. Son aleatorios, de un solo uso, se almacenan mediante su huella y están separados por centro. Reemitir un enlace del mismo propósito y destinatario invalida el anterior. Al completar el alta se anulan los enlaces del destinatario.
+- Recuperar no altera la contraseña hasta que la persona completa el formulario. Al cambiarla se invalidan sus sesiones. Una cuenta desactivada o modificada desde la emisión no puede recuperarse con el enlace anterior. No se cambian roles.
+- No hay servicio de correo configurado: el operador copia y comparte el enlace privado con la persona. Nunca se envía ni se muestra su contraseña. Los usuarios antiguos que no sean correos mantienen el cambio manual de contraseña.
+- El enlace se abre en el navegador. El token viaja en el fragmento, se retira de la barra al abrir y se envía exclusivamente al confirmar la nueva contraseña. No se inicia una sesión automáticamente ni se sobrescribe la sesión de otra persona.
+- La versión nueva permite elegir centro y entrar con usuario y contraseña sin una segunda clave compartida ni selector de rol. La autorización personal sigue comprobándose en servidor. Las rutas de activación y acceso antiguas permanecen para clientes anteriores.
+- Se recuerda únicamente el identificador público del último centro. Cambiar autoescuela sigue disponible; no se conserva por este mecanismo una contraseña ni se trasladan datos de cuentas.
+- La clave de «Desbloquear este dispositivo» conserva el cifrado existente. Recuperar la cuenta no descifra materiales si se pierde esa clave.
+- Pruebas: invitación inicial, profesor, recuperación, caducidad, reutilización, separación entre centros, permisos, revocación de sesiones y compatibilidad con el acceso anterior. Las pruebas HTTP usan centros ficticios locales.

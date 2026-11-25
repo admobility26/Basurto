@@ -1,3 +1,4 @@
+import {AccessLinks} from './access-links.mjs';
 import {Schools,DEFAULT_SCHOOL,officeName,publicSchool,authorizePlatformOwner,subscriptionActive} from './schools.mjs';
 import {Packages} from './packages.mjs';
 import { DurableObject } from 'cloudflare:workers';
@@ -15,9 +16,10 @@ export class BasurtoOffice extends DurableObject {
  constructor(ctx,env){super(ctx,env);this.ctx=ctx;this.env=env;const sql=ctx.storage.sql;
   ctx.storage.transactionSync(()=>{sql.exec(SCHEMA);sql.exec('CREATE TABLE IF NOT EXISTS request_limits(key TEXT PRIMARY KEY, count INTEGER NOT NULL, until REAL NOT NULL)')});
   this.store=new Store({all:(q,...p)=>sql.exec(q,...p).toArray(),run:(q,...p)=>{sql.exec(q,...p).toArray()},tx:fn=>ctx.storage.transactionSync(fn)},env);
-  this.schools=new Schools(this.store);this.schoolConfig={...DEFAULT_SCHOOL,keyHash:''};
+  this.accessLinks=new AccessLinks(this.store);this.schools=new Schools(this.store);this.schoolConfig={...DEFAULT_SCHOOL,keyHash:''};
   this.training=new Training(this.store);this.training.initialize();this.packages=new Packages(this.store,env,ctx);
  }
+ issueInitialInvite(identity,data){try{return {value:this.accessLinks.issue(identity,data,true)}}catch(e){return {error:e instanceof Problem?e.message:'No se pudo crear el enlace',status:e instanceof Problem?e.status:500}}}
  hasSchoolAdministrator(){return Boolean(this.store.one("SELECT 1 FROM users WHERE role IN ('admin','manager') AND substr(id,1,9)!='platform_'"))}
  courseIds(){return this.store.all("SELECT id FROM course_packages WHERE status!='deleted'").map(r=>r.id)}
  maintenanceSession(identity,school){return this.store.maintenanceSession(identity,school)}
@@ -59,7 +61,7 @@ export class BasurtoOffice extends DurableObject {
   let data;try{data=JSON.parse(Buffer.concat(chunks).toString('utf8'))}catch{throw new Problem('Solicitud inválida')}
   if(!data||typeof data!=='object'||Array.isArray(data))throw new Problem('Solicitud inválida');
   // Rate limit anonymous expensive auth without keeping plaintext network identifiers.
-  if(path==='/api/login'||path==='/api/setup'||path==='/api/recover'||path==='/api/school-enter'||path==='/api/schools/maintenance'){
+  if(path==='/api/login'||path==='/api/setup'||path==='/api/recover'||path==='/api/school-enter'||path==='/api/schools/maintenance'||path==='/api/access-accept'){
    const {digest}=await import('./store.mjs');const key=digest((request.headers.get('CF-Connecting-IP')||'local')+':'+path),now=Date.now()/1000;
    store.run('DELETE FROM request_limits WHERE until<?',now);
    const row=store.one('SELECT * FROM request_limits WHERE key=?',key);
@@ -70,14 +72,17 @@ export class BasurtoOffice extends DurableObject {
     const ownerSession=store.login({...data,role:'admin'});
     try{const owner=authorizePlatformOwner(store,store.authenticate(ownerSession.token));if(data.mode==='subscriptions'){const session=store.session(owner.id);return json({platform:true,csrf:session.csrf},200,cookie(session.token,request));}if(!subscriptionActive(config))throw new Problem('El centro tiene el uso suspendido. Reactívalo desde Suscripciones.',423);const ns=this.env.LOCAL_DEVELOPMENT==='true'?this.env.OFFICE:this.env.OFFICE.jurisdiction('eu');const target=ns.get(ns.idFromName(officeName(config.id)));const session=config.id==='basurto'?store.session(owner.id):await target.maintenanceSession(owner,config.id);store.run('INSERT INTO audit(actor,action,entity,at) VALUES(?,?,?,?)',owner.id,'platform_maintenance_open',config.id,new Date().toISOString());return json({school:publicSchool(config),csrf:session.csrf},200,cookie(session.token,request));}finally{store.logout(ownerSession.token)}
    }
+   if(path==='/api/access-accept')return json(this.accessLinks.accept(data));
    if(path==='/api/school-enter')return json(this.schools.grant(this.schoolConfig,data.key));
-   if(path==='/api/login')this.schools.checkGrant(this.schoolConfig,data.schoolGrant);
+   // Personal credentials and school-specific storage authorize login; legacy school keys remain compatible.
    if(path==='/api/recover')return json(store.recover(data),200,cookie('',request,true));
    const session=path==='/api/setup'?store.activate(data):store.login(data);
    return json({csrf:session.csrf},200,cookie(session.token,request));
   }
   const user=store.authenticate(token);
   if(!same(request.headers.get('X-CSRF-Token')||'',user.csrf))throw new Problem('Sesión no válida',403);
+  if(path==='/api/access-link')return json(this.accessLinks.issue(user,data));
+  if(path==='/api/schools/invite'){authorizePlatformOwner(store,user);const config=this.schools.get(data.id);if(!config||config.id==='basurto')throw new Problem('Selecciona un centro nuevo',400);if(!subscriptionActive(config))throw new Problem('Reactiva el centro antes de invitar',409);const ns=this.env.LOCAL_DEVELOPMENT==='true'?this.env.OFFICE:this.env.OFFICE.jurisdiction('eu');const target=ns.get(ns.idFromName(officeName(config.id)));const outcome=await target.issueInitialInvite({id:user.id},{email:data.email,purpose:data.purpose});return outcome.error?json({error:outcome.error},outcome.status):json(outcome.value);}
   if(path==='/api/schools/subscriptions')return this.ctx.blockConcurrencyWhile(async()=>{try{
    authorizePlatformOwner(store,user);const config=this.schools.get(data.id);if(!config)throw new Problem('Autoescuela no disponible',404);if(data.action==='renewActivation'){if(config.id==='basurto')throw new Problem('La cuenta de la plataforma ya está activada',409);const ns=this.env.LOCAL_DEVELOPMENT==='true'?this.env.OFFICE:this.env.OFFICE.jurisdiction('eu');if(await ns.get(ns.idFromName(officeName(config.id))).hasSchoolAdministrator())throw new Problem('Este centro ya tiene administración activada. La renovación no cambia contraseñas existentes.',409);return json(this.schools.renewActivation(user,data));}if(!['active','suspended','cancelled'].includes(data.status))throw new Problem('Estado no válido');if(data.revision!==(config.subscription?.revision||0))throw new Problem('La suscripción ha cambiado. Actualiza el panel.',409);
    const ns=this.env.LOCAL_DEVELOPMENT==='true'?this.env.OFFICE:this.env.OFFICE.jurisdiction('eu');const ids=data.id==='basurto'?this.courseIds():await ns.get(ns.idFromName(officeName(data.id))).courseIds();const keys=['schools/blocked/'+config.id,...ids.map(id=>'courses/blocked/'+id)];
