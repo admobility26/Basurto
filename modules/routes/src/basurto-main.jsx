@@ -23,7 +23,7 @@ async function start(){
  if(parent===window||!parent.BasurtoRoutes)throw Error('Abre Formación → Recorridos desde Basurto.');
  session=await parent.BasurtoRoutes.connect(window,{flush,close});
  window.schoolBrand=session.brand;
- if(session.brand){const b=session.brand;document.documentElement.style.setProperty('--school-primary',b.primary);document.documentElement.style.setProperty('--school-secondary',b.secondary);const decorate=()=>document.querySelectorAll('img[src="/logo.png"]').forEach(img=>{if(b.logo&&b.logo!=='/logo.png')img.src=b.logo;img.alt=b.name});new MutationObserver(decorate).observe(document.body,{subtree:true,childList:true});}
+ if(session.brand){const foreground=hex=>{const c=hex.replace('#','').match(/../g).map(v=>{const n=parseInt(v,16)/255;return n<=.04045?n/12.92:((n+.055)/1.055)**2.4});return .2126*c[0]+.7152*c[1]+.0722*c[2]>.179?'#000000':'#ffffff'};const b=session.brand;document.documentElement.style.setProperty('--school-on-primary',foreground(b.primary));document.documentElement.style.setProperty('--school-primary',b.primary);document.documentElement.style.setProperty('--school-secondary',b.secondary);const decorate=()=>document.querySelectorAll('img[src="/logo.png"]').forEach(img=>{if(b.logo&&b.logo!=='/logo.png')img.src=b.logo;img.alt=b.name});new MutationObserver(decorate).observe(document.body,{subtree:true,childList:true});}
  window.basurtoCanCreateVideos=['admin','manager'].includes(session.user.role);
  document.body.classList.toggle('teacher-materials',!window.basurtoCanCreateVideos);
  const secret=await session.localKey();
