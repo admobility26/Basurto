@@ -18,6 +18,7 @@ export class BasurtoOffice extends DurableObject {
   this.schools=new Schools(this.store);this.schoolConfig={...DEFAULT_SCHOOL,keyHash:''};
   this.training=new Training(this.store);this.training.initialize();this.packages=new Packages(this.store,env,ctx);
  }
+ hasSchoolAdministrator(){return Boolean(this.store.one("SELECT 1 FROM users WHERE role IN ('admin','manager') AND substr(id,1,9)!='platform_'"))}
  courseIds(){return this.store.all("SELECT id FROM course_packages WHERE status!='deleted'").map(r=>r.id)}
  maintenanceSession(identity,school){return this.store.maintenanceSession(identity,school)}
  school(id,full=false){const c=this.schools.get(id);if(!c||full)return c;const {logo,cover,...rest}=c;return rest}
@@ -77,11 +78,12 @@ export class BasurtoOffice extends DurableObject {
   }
   const user=store.authenticate(token);
   if(!same(request.headers.get('X-CSRF-Token')||'',user.csrf))throw new Problem('Sesión no válida',403);
-  if(path==='/api/schools/subscriptions')return this.ctx.blockConcurrencyWhile(async()=>{
-   authorizePlatformOwner(store,user);const config=this.schools.get(data.id);if(!config)throw new Problem('Autoescuela no disponible',404);if(!['active','suspended','cancelled'].includes(data.status))throw new Problem('Estado no válido');if(data.revision!==(config.subscription?.revision||0))throw new Problem('La suscripción ha cambiado. Actualiza el panel.',409);
+  if(path==='/api/schools/subscriptions')return this.ctx.blockConcurrencyWhile(async()=>{try{
+   authorizePlatformOwner(store,user);const config=this.schools.get(data.id);if(!config)throw new Problem('Autoescuela no disponible',404);if(data.action==='renewActivation'){if(config.id==='basurto')throw new Problem('La cuenta de la plataforma ya está activada',409);const ns=this.env.LOCAL_DEVELOPMENT==='true'?this.env.OFFICE:this.env.OFFICE.jurisdiction('eu');if(await ns.get(ns.idFromName(officeName(config.id))).hasSchoolAdministrator())throw new Problem('Este centro ya tiene administración activada. La renovación no cambia contraseñas existentes.',409);return json(this.schools.renewActivation(user,data));}if(!['active','suspended','cancelled'].includes(data.status))throw new Problem('Estado no válido');if(data.revision!==(config.subscription?.revision||0))throw new Problem('La suscripción ha cambiado. Actualiza el panel.',409);
    const ns=this.env.LOCAL_DEVELOPMENT==='true'?this.env.OFFICE:this.env.OFFICE.jurisdiction('eu');const ids=data.id==='basurto'?this.courseIds():await ns.get(ns.idFromName(officeName(data.id))).courseIds();const keys=['schools/blocked/'+config.id,...ids.map(id=>'courses/blocked/'+id)];
    for(const key of keys){if(data.status==='active')await this.env.TRAINING_FILES.delete(key);else await this.env.TRAINING_FILES.put(key,'blocked');}
    return json(this.schools.changeSubscription(user,data));
+   }catch(e){return json({error:e instanceof Problem?e.message:'No se pudo completar la operación'},e instanceof Problem?e.status:500)}
   });
   if(path==='/api/schools/manage'){authorizePlatformOwner(store,user);if(this.schoolConfig.id!=='basurto')throw new Problem('Gestión central no disponible',403);return json(this.schools.save(user,data));}
   if(path==='/api/logout'||path==='/api/schools/logout'){store.logout(token);return json({ok:true},200,cookie('',request,true))}

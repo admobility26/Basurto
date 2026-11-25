@@ -111,3 +111,20 @@ test('breakdown preserves existing classes, managers edit blocks and stale edits
  denies(409,()=>f.act(f.admin,{...data,action:'edit_vehicle_block',block_id:block,version:1}));
  denies(400,()=>f.act(manager,{...data,end:'2020-01-01T00:00:00Z'}));
 });
+
+test('each school admin and manager can create, reset and deactivate teachers',()=>{
+ for(const role of ['admin','manager']){
+ const f=fixture();let actor=f.admin;
+ if(role==='manager'){f.act(f.admin,{action:'create_user',name:'Gerente',username:'gerente',password:pass,role});actor=f.s.authenticate(f.s.login({username:'gerente',password:pass}).token);}
+ const id=f.act(actor,{action:'create_user',name:'Profesor nuevo',username:'nuevo',password:pass,role:'teacher'}).id;
+ const session=f.s.login({username:'nuevo',password:pass});
+ let row=f.s.bootstrap(actor).users.find(u=>u.id===id);
+ f.act(actor,{action:'edit_user',user_id:id,revision:row.revision,name:row.name,username:row.username,password:'New-password-456'});
+ denies(401,()=>f.s.authenticate(session.token));denies(401,()=>f.s.login({username:'nuevo',password:pass}));
+ const next=f.s.login({username:'nuevo',password:'New-password-456'});
+ row=f.s.bootstrap(actor).users.find(u=>u.id===id);
+ f.act(actor,{action:'delete_record',kind:'user',entity_id:id,revision:row.revision});
+ denies(401,()=>f.s.authenticate(next.token));denies(401,()=>f.s.login({username:'nuevo',password:'New-password-456'}));
+ assert.equal(f.s.one('SELECT active FROM users WHERE id=?',id).active,0);
+ }
+});

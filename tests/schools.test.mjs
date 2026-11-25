@@ -22,3 +22,19 @@ test('maintenance has a traceable actor, expires in an hour and does not consume
 
 test('owner manages subscriptions without receiving students, accounts or secret fields',()=>{const f=fixture();f.store.env={ADMIN_EMAIL:'admobility26@gmail.com',ADMIN_ACTIVATION_HASH:digest('initial'),ADMIN_ACTIVATION_EXPIRES:Date.now()/1000+100};const auth=f.store.activate({username:'admobility26@gmail.com',activation:'initial',password:'Personal-password-123',confirmation:'Personal-password-123'});const owner=f.store.authenticate(auth.token);f.schools.save(owner,sample);const suspended=f.schools.changeSubscription(owner,{id:sample.id,status:'suspended',revision:0});assert.equal(suspended.revision,1);assert.throws(()=>f.schools.changeSubscription(owner,{id:sample.id,status:'active',revision:0}),e=>e.status===409);f.schools.save(owner,{...sample,key:'',name:'Nueva imagen'});assert.equal(f.schools.get(sample.id).subscription.status,'suspended');const rows=f.schools.subscriptions(owner);assert.deepEqual(Object.keys(rows[0]).sort(),['id','name','revision','status']);f.schools.changeSubscription(owner,{id:sample.id,status:'cancelled',revision:1});assert(!f.schools.list().some(s=>s.id===sample.id));assert(f.schools.subscriptions(owner).some(s=>s.id===sample.id));f.schools.changeSubscription(owner,{id:sample.id,status:'active',revision:2});assert(f.schools.list().some(s=>s.id===sample.id));assert.throws(()=>f.schools.changeSubscription({...owner,role:'manager'},{id:sample.id,status:'suspended',revision:3}),e=>e.status===403);});
 test('course links issued before subscription support can also be blocked',async()=>{const {serveCourse}=await import('../cloudflare/course-viewer.mjs');const token='a'.repeat(64),grant={id:'old-course',expires:Date.now()/1000+100};const env={TRAINING_FILES:{get:async key=>key==='courses/access/'+token?{json:async()=>grant}:key==='courses/blocked/old-course'?{body:'blocked'}:null}};const response=await serveCourse(new Request('https://courses.test/c/'+token+'/index.html'),env);assert.equal(response.status,423);});
+
+test('owner renews initial activation without changing school key or subscription',()=>{
+ const f=fixture();f.store.env={ADMIN_EMAIL:'admobility26@gmail.com',ADMIN_ACTIVATION_HASH:digest('initial'),ADMIN_ACTIVATION_EXPIRES:Date.now()/1000+100};
+ const auth=f.store.activate({username:'admobility26@gmail.com',activation:'initial',password:'Personal-password-123',confirmation:'Personal-password-123'});
+ const owner=f.store.authenticate(auth.token);f.schools.save(owner,sample);const before=f.schools.get(sample.id);
+ assert.throws(()=>f.schools.renewActivation({...owner,role:'manager'},{id:sample.id,adminEmail:'new@example.test'}),e=>e.status===403);
+ assert.throws(()=>f.schools.renewActivation(owner,{id:sample.id,adminEmail:'bad'}));
+ const next=f.schools.renewActivation(owner,{id:sample.id,adminEmail:' Correct@example.test '});const after=f.schools.get(sample.id);
+ assert.equal(after.adminEmail,'correct@example.test');assert.equal(after.keyHash,before.keyHash);assert.deepEqual(after.subscription,before.subscription);
+ assert.notEqual(after.activationHash,before.activationHash);assert.equal(after.activationHash,digest(next.activation));assert(next.expires>Date.now()/1000+29*86400);
+ assert(!JSON.stringify(f.schools.list()).includes(next.activation));assert(!JSON.stringify(f.store.all('SELECT * FROM audit')).includes(next.activation));
+ const target=fixture();target.store.env={ADMIN_EMAIL:after.adminEmail,ADMIN_ACTIVATION_HASH:after.activationHash,ADMIN_ACTIVATION_EXPIRES:after.activationExpires};
+ const data={username:after.adminEmail,password:'Personal-password-123',confirmation:'Personal-password-123'};
+ assert.throws(()=>target.store.activate({...data,activation:sample.key}));
+ target.store.activate({...data,activation:next.activation});assert.throws(()=>target.store.activate({...data,activation:next.activation}));
+});
